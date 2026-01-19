@@ -1,10 +1,10 @@
 {
 	"info": {
 		"name": "Adamant HR - Admin APIs",
-		"description": "Complete API collection for Adamant HR Admin Panel",
+		"description": "Complete API collection for Adamant HR Admin Panel. Includes enhanced vacancy management with industry integration, advanced filtering, pagination, and bulk operations.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_postman_id": "adamant-hr-admin-apis",
-		"version": "1.0.0"
+		"version": "2.0.0"
 	},
 	"variable": [
 		{
@@ -393,7 +393,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"jobTitle\": \"Software Engineer\",\n  \"description\": \"We are looking for an experienced software engineer to join our team.\",\n  \"qualification\": \"Bachelor's degree in Computer Science. 2+ years of experience.\"\n}",
+							"raw": "{\n  \"jobTitle\": \"Software Engineer\",\n  \"description\": \"We are looking for an experienced software engineer to join our team.\",\n  \"qualification\": \"Bachelor's degree in Computer Science. 2+ years of experience.\",\n  \"industry\": \"INDUSTRY_ID_HERE\",\n  \"skills\": [\"JavaScript\", \"React\", \"Node.js\"],\n  \"city\": \"Noida\",\n  \"state\": \"Uttar Pradesh\",\n  \"country\": \"India\",\n  \"isRemote\": false,\n  \"employmentType\": \"Full-time\",\n  \"experienceLevel\": \"2-5 years\",\n  \"salary\": {\n    \"min\": 50000,\n    \"max\": 80000,\n    \"currency\": \"INR\",\n    \"isNegotiable\": true\n  },\n  \"applicationDeadline\": \"2024-12-31T23:59:59.000Z\",\n  \"numberOfOpenings\": 2,\n  \"status\": \"active\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -405,17 +405,17 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "vacancy", "add"]
 						},
-						"description": "Add a new vacancy. Requires admin authentication. jobId is auto-generated."
+						"description": "Add a new vacancy with enhanced fields. Requires admin authentication. jobId is auto-generated. All fields except jobTitle, description, and qualification are optional."
 					},
 					"response": []
 				},
 				{
-					"name": "List Vacancies (with Pagination)",
+					"name": "List Vacancies (with Pagination & Filters)",
 					"request": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/vacancy/list?page=1&limit=10",
+							"raw": "{{base_url}}/api/vacancy/list?page=1&limit=10&status=active&industry=INDUSTRY_ID&employmentType=Full-time&experienceLevel=2-5 years&city=Noida&state=Uttar Pradesh&isRemote=false&search=engineer",
 							"host": ["{{base_url}}"],
 							"path": ["api", "vacancy", "list"],
 							"query": [
@@ -428,10 +428,110 @@
 									"key": "limit",
 									"value": "10",
 									"description": "Items per page (default: 10)"
+								},
+								{
+									"key": "status",
+									"value": "active",
+									"description": "Filter by status: 'active', 'closed', 'draft', or 'all' (default: 'active')",
+									"disabled": true
+								},
+								{
+									"key": "industry",
+									"value": "INDUSTRY_ID",
+									"description": "Filter by industry ID",
+									"disabled": true
+								},
+								{
+									"key": "employmentType",
+									"value": "Full-time",
+									"description": "Filter by employment type: 'Full-time', 'Part-time', 'Contract', 'Internship', 'Freelance'",
+									"disabled": true
+								},
+								{
+									"key": "experienceLevel",
+									"value": "2-5 years",
+									"description": "Filter by experience: 'Fresher', '0-2 years', '2-5 years', '5-10 years', '10+ years'",
+									"disabled": true
+								},
+								{
+									"key": "city",
+									"value": "Noida",
+									"description": "Filter by city (case-insensitive partial match)",
+									"disabled": true
+								},
+								{
+									"key": "state",
+									"value": "Uttar Pradesh",
+									"description": "Filter by state (case-insensitive partial match)",
+									"disabled": true
+								},
+								{
+									"key": "isRemote",
+									"value": "false",
+									"description": "Filter by remote work: 'true' or 'false'",
+									"disabled": true
+								},
+								{
+									"key": "search",
+									"value": "engineer",
+									"description": "Search in job title and description (case-insensitive)",
+									"disabled": true
 								}
 							]
 						},
-						"description": "Get all vacancies with pagination. No authentication required. Returns pagination metadata."
+						"description": "Get vacancies with pagination and advanced filtering. No authentication required. Returns pagination metadata and applied filters. By default, only 'active' vacancies are returned."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Vacancy by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/vacancy/get/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "vacancy", "get", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "VACANCY_ID_HERE"
+								}
+							]
+						},
+						"description": "Get a single vacancy by ID with full details including populated industry. No authentication required. Automatically increments view count."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Vacancy",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+							"key": "Authorization",
+							"value": "Bearer {{admin_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"VACANCY_ID_HERE\",\n  \"jobTitle\": \"Senior Software Engineer\",\n  \"description\": \"Updated description\",\n  \"qualification\": \"Updated qualification\",\n  \"industry\": \"INDUSTRY_ID_HERE\",\n  \"skills\": [\"JavaScript\", \"React\", \"Node.js\", \"TypeScript\"],\n  \"city\": \"Noida\",\n  \"state\": \"Uttar Pradesh\",\n  \"country\": \"India\",\n  \"isRemote\": false,\n  \"employmentType\": \"Full-time\",\n  \"experienceLevel\": \"5-10 years\",\n  \"salary\": {\n    \"min\": 80000,\n    \"max\": 120000,\n    \"currency\": \"INR\",\n    \"isNegotiable\": true\n  },\n  \"applicationDeadline\": \"2024-12-31T23:59:59.000Z\",\n  \"numberOfOpenings\": 3,\n  \"status\": \"active\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/vacancy/update",
+							"host": ["{{base_url}}"],
+							"path": ["api", "vacancy", "update"]
+						},
+						"description": "Update an existing vacancy. Requires admin authentication. All fields are optional except 'id'. If status changes to 'active', publishedAt is automatically set."
 					},
 					"response": []
 				},
@@ -463,7 +563,71 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "vacancy", "remove"]
 						},
-						"description": "Delete a vacancy. Requires admin authentication."
+						"description": "Delete a single vacancy. Requires admin authentication."
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk Remove Vacancies",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+							"key": "Authorization",
+							"value": "Bearer {{admin_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ids\": [\n    \"VACANCY_ID_1\",\n    \"VACANCY_ID_2\",\n    \"VACANCY_ID_3\"\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/vacancy/bulk-remove",
+							"host": ["{{base_url}}"],
+							"path": ["api", "vacancy", "bulk-remove"]
+						},
+						"description": "Delete multiple vacancies at once. Requires admin authentication. Returns count of deleted items and any failed deletions."
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk Update Status",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+							"key": "Authorization",
+							"value": "Bearer {{admin_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ids\": [\n    \"VACANCY_ID_1\",\n    \"VACANCY_ID_2\",\n    \"VACANCY_ID_3\"\n  ],\n  \"status\": \"active\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/vacancy/bulk-update-status",
+							"host": ["{{base_url}}"],
+							"path": ["api", "vacancy", "bulk-update-status"]
+						},
+						"description": "Update status of multiple vacancies at once. Requires admin authentication. Status must be 'active', 'closed', or 'draft'. If setting to 'active', publishedAt is automatically set. Returns count of updated items."
 					},
 					"response": []
 				}

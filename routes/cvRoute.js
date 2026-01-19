@@ -19,10 +19,17 @@ const uploadResume = multer({
   storage: resumeStorage,
   fileFilter: async (req, file, cb) => {
     try {
-      const exist = await CVModel.findOne({ email: req.body.email });
-      if (exist) {
-        // Reject the file if CV already exists
-        return cb(new Error("already applied"), false);
+      // Check for duplicates: same email + jobId combination
+      // This allows same person to apply to different jobs, but prevents duplicate applications to same job
+      if (req.body.email && req.body.jobId) {
+        const exist = await CVModel.findOne({ 
+          email: req.body.email.toLowerCase().trim(),
+          jobId: req.body.jobId.toString().trim()
+        });
+        if (exist) {
+          // Reject the file if this person has already applied to this specific job
+          return cb(new Error("already applied"), false);
+        }
       }
       cb(null, true); // accept file
     } catch (err) {
@@ -31,9 +38,39 @@ const uploadResume = multer({
   },
 });
 
+// Error handling middleware for multer errors
+const handleMulterError = (err, req, res, next) => {
+  if (err) {
+    console.error(`[${new Date().toISOString()}] Multer Error:`, err);
+    
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+    
+    // Handle custom errors from fileFilter (like "already applied")
+    if (err.message === "already applied") {
+      return res.status(400).json({ 
+        success: false, 
+        message: "You have already applied to this job position. Please check your email or contact support if you believe this is an error." 
+      });
+    }
+    
+    return res.status(400).json({ success: false, message: err.message || "File upload error" });
+  }
+  next();
+};
+
 // Routes
 // Apply upload rate limiting to file upload endpoints
-cvRouter.post("/add", uploadLimiter, uploadResume.single("resume"), addCV); // Public endpoint for job applications
+// Note: Error handler must come after multer middleware
+cvRouter.post("/add", uploadLimiter, (req, res, next) => {
+  uploadResume.single("resume")(req, res, (err) => {
+    if (err) {
+      return handleMulterError(err, req, res, next);
+    }
+    next();
+  });
+}, addCV); // Public endpoint for job applications
 cvRouter.get("/get/:id", verifyAdmin, getCV); // Admin only
 cvRouter.get("/list", verifyAdmin, listCVs); // Admin only
 cvRouter.post("/remove", verifyAdmin, uploadResume.none(), removeCV); // Admin only
