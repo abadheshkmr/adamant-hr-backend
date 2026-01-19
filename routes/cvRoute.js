@@ -3,6 +3,7 @@ import { addCV, getCV, listCVs, removeCV } from "../controllers/cvController.js"
 import multer from "multer";
 import CVModel from "../models/cvModel.js";
 import { uploadLimiter } from "../middleware/ddosProtection.js";
+import verifyAdmin from "../middleware/verifyAdmin.js";
 
 const cvRouter = express.Router();
 
@@ -32,9 +33,9 @@ const uploadResume = multer({
 
 // Routes
 // Apply upload rate limiting to file upload endpoints
-cvRouter.post("/add", uploadLimiter, uploadResume.single("resume"), addCV);
-cvRouter.get("/get/:id", getCV);
-cvRouter.get("/list", listCVs);
-cvRouter.post("/remove", uploadResume.none(), removeCV);
+cvRouter.post("/add", uploadLimiter, uploadResume.single("resume"), addCV); // Public endpoint for job applications
+cvRouter.get("/get/:id", verifyAdmin, getCV); // Admin only
+cvRouter.get("/list", verifyAdmin, listCVs); // Admin only
+cvRouter.post("/remove", verifyAdmin, uploadResume.none(), removeCV); // Admin only
 
 export default cvRouter;

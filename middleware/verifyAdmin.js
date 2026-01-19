@@ -10,11 +10,24 @@ const hash = process.env.hash;
 
 const verifyAdmin = async (req, res, next) => {
   try {
-    const token = req.header("Authtoken");
-    if (!token) {
+    // Get token from Authorization header (Bearer token format)
+    const authHeader = req.header("Authorization");
+    
+    if (!authHeader) {
       return res
         .status(401)
         .json({ success: false, message: "Access denied. No token provided." });
+    }
+
+    // Extract token from "Bearer <token>"
+    const token = authHeader.startsWith("Bearer ") 
+      ? authHeader.slice(7) 
+      : authHeader; // Fallback for backward compatibility
+
+    if (!token) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Access denied. Invalid token format." });
     }
 
     // Verify token

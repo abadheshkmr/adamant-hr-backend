@@ -26,16 +26,39 @@ const addVacancy = async (req , res) => {
 
 }
 
-// all vacancy list
+// all vacancy list with pagination
 
 const listVacancy = async (req,res) => {
     try {
-        const vacancies = await vacancyModel.find({}).sort({ createdAt: -1 });
-        res.json({success:true, data:vacancies})
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10; // Default 10 per page
+        const skip = (page - 1) * limit;
+
+        // Get total count for pagination info
+        const total = await vacancyModel.countDocuments({});
+        
+        // Fetch with pagination and projection (only needed fields)
+        const vacancies = await vacancyModel
+            .find({})
+            .select('jobTitle description qualification jobId createdAt') // Only return needed fields
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .lean(); // Use lean() for faster queries (returns plain JS objects)
+
+        res.json({
+            success: true,
+            data: vacancies,
+            pagination: {
+                currentPage: page,
+                totalPages: Math.ceil(total / limit),
+                totalItems: total,
+                itemsPerPage: limit
+            }
+        });
     } catch (error) {
         console.log(error);
-        res.json({success:false,message:"Error"});
-
+        res.json({success: false, message: "Error"});
     }
 }
 

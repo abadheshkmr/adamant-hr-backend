@@ -9,6 +9,10 @@ const vacancySchema = new mongoose.Schema({
 
 })
 
+// Add indexes for faster queries
+vacancySchema.index({ createdAt: -1 }); // For sorting by creation date
+vacancySchema.index({ jobId: 1 }); // Already unique, but explicit index helps
+
 const vacancyModel = mongoose.models.vacancies || mongoose.model("vacancies" , vacancySchema);
 
 export default vacancyModel;
