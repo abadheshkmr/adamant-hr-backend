@@ -82,6 +82,22 @@ app.get("/" , (req , res)=>{
     res.send("API Working")
 })
 
+// Global error handler (must be last)
+app.use((err, req, res, next) => {
+    console.error(`[${new Date().toISOString()}] Unhandled Error:`, err);
+    console.error('Error stack:', err.stack);
+    
+    // Don't send error details in production
+    const message = process.env.NODE_ENV === 'production' 
+        ? 'Internal server error' 
+        : err.message;
+    
+    res.status(err.status || 500).json({
+        success: false,
+        message: message
+    });
+});
+
 app.listen(port, ()=>{
     console.log(`server started on http://localhost:${port}`);
 })
