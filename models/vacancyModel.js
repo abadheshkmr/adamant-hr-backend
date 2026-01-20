@@ -11,8 +11,7 @@ const vacancySchema = new mongoose.Schema({
     jobId: {
         type: Number,
         unique: true,
-        required: true,
-        index: true
+        required: true
     },
     
     // Industry Relationship (Reference to Industry)
@@ -21,6 +20,18 @@ const vacancySchema = new mongoose.Schema({
         ref: 'industries',
         required: false, // Optional for backward compatibility, will be required for new posts
         index: true
+    },
+    
+    // Client/Company Information
+    client: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'clients',
+        required: false, // Optional - some vacancies may not have a client
+        index: true
+    },
+    showClientToCandidate: {
+        type: Boolean,
+        default: false // Hidden by default
     },
     
     // Job Details
@@ -150,7 +161,9 @@ vacancySchema.index({ employmentType: 1, status: 1 }); // For employment type fi
 vacancySchema.index({ experienceLevel: 1, status: 1 }); // For experience level filtering
 vacancySchema.index({ status: 1, createdAt: -1 }); // For status-based queries
 vacancySchema.index({ createdAt: -1 }); // For sorting by creation date
-vacancySchema.index({ jobId: 1 }); // Already unique, but explicit index helps
+// Note: jobId already has unique index from unique: true, so we don't need to add it again
+vacancySchema.index({ client: 1, status: 1 }); // For filtering by client
+vacancySchema.index({ showClientToCandidate: 1 }); // For visibility queries
 
 const vacancyModel = mongoose.models.vacancies || mongoose.model("vacancies", vacancySchema);
 

@@ -21,17 +21,55 @@ const verifyAdmin = async (req, res, next) => {
 
     // Extract token from "Bearer <token>"
     const token = authHeader.startsWith("Bearer ") 
-      ? authHeader.slice(7) 
-      : authHeader; // Fallback for backward compatibility
+      ? authHeader.slice(7).trim() 
+      : authHeader.trim(); // Fallback for backward compatibility
 
-    if (!token) {
+    // Validate token format (basic check - JWT should have 3 parts separated by dots)
+    if (!token || token === "null" || token === "undefined" || token.length < 10) {
       return res
         .status(401)
         .json({ success: false, message: "Access denied. Invalid token format." });
     }
 
+    // Check if token looks like a JWT (has 3 parts separated by dots)
+    const tokenParts = token.split('.');
+    if (tokenParts.length !== 3) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Access denied. Malformed token." });
+    }
+
     // Verify token
-    const decoded = jwt.verify(token, hash);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, hash);
+    } catch (jwtError) {
+      // Handle specific JWT errors
+      if (jwtError.name === 'JsonWebTokenError') {
+        return res.status(401).json({ 
+          success: false, 
+          message: "Access denied. Invalid token signature." 
+        });
+      } else if (jwtError.name === 'TokenExpiredError') {
+        return res.status(401).json({ 
+          success: false, 
+          message: "Access denied. Token has expired. Please login again." 
+        });
+      } else {
+        return res.status(401).json({ 
+          success: false, 
+          message: "Access denied. Token verification failed." 
+        });
+      }
+    }
+    
+    // Validate decoded token structure
+    if (!decoded || !decoded.user) {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Access denied. Invalid token structure." 
+      });
+    }
     
     const { id: email, password } = decoded.user;
     if (email === admin_username && password === admin_password) {
@@ -45,8 +83,11 @@ const verifyAdmin = async (req, res, next) => {
       });
     }
   } catch (err) {
-    console.error(err);
-    return res.status(401).json({ success: false, message: "Invalid token" });
+    console.error(`[${new Date().toISOString()}] verifyAdmin Error:`, err);
+    return res.status(401).json({ 
+      success: false, 
+      message: "Access denied. Authentication failed." 
+    });
   }
 };
 
