@@ -1,7 +1,8 @@
 import express from "express";
-import { addCV, getCV, listCVs, removeCV } from "../controllers/cvController.js";
+import { addCV, getCV, listCVs, listCandidates, getCandidate, updateApplicationStatus, removeCV } from "../controllers/cvController.js";
 import multer from "multer";
-import CVModel from "../models/cvModel.js";
+import ApplicationModel from "../models/applicationModel.js";
+import CandidateModel from "../models/candidateModel.js";
 import { uploadLimiter } from "../middleware/ddosProtection.js";
 import verifyAdmin from "../middleware/verifyAdmin.js";
 
@@ -19,16 +20,26 @@ const uploadResume = multer({
   storage: resumeStorage,
   fileFilter: async (req, file, cb) => {
     try {
-      // Check for duplicates: same email + jobId combination
+      // Check for duplicates: same candidate + jobId combination
       // This allows same person to apply to different jobs, but prevents duplicate applications to same job
       if (req.body.email && req.body.jobId) {
-        const exist = await CVModel.findOne({ 
-          email: req.body.email.toLowerCase().trim(),
-          jobId: req.body.jobId.toString().trim()
-        });
-        if (exist) {
-          // Reject the file if this person has already applied to this specific job
-          return cb(new Error("already applied"), false);
+        const normalizedEmail = req.body.email.toLowerCase().trim();
+        const normalizedJobId = req.body.jobId.toString().trim();
+        
+        // Find candidate by email
+        const candidate = await CandidateModel.findOne({ email: normalizedEmail });
+        
+        if (candidate) {
+          // Check if application already exists
+          const exist = await ApplicationModel.findOne({
+            candidateId: candidate._id,
+            jobId: normalizedJobId
+          });
+          
+          if (exist) {
+            // Reject the file if this person has already applied to this specific job
+            return cb(new Error("already applied"), false);
+          }
         }
       }
       cb(null, true); // accept file
@@ -71,8 +82,15 @@ cvRouter.post("/add", uploadLimiter, (req, res, next) => {
     next();
   });
 }, addCV); // Public endpoint for job applications
-cvRouter.get("/get/:id", verifyAdmin, getCV); // Admin only
-cvRouter.get("/list", verifyAdmin, listCVs); // Admin only
-cvRouter.post("/remove", verifyAdmin, uploadResume.none(), removeCV); // Admin only
+
+// Application routes (admin only)
+cvRouter.get("/get/:id", verifyAdmin, getCV); // Get single application
+cvRouter.get("/list", verifyAdmin, listCVs); // List all applications (can filter by jobId or candidateId)
+cvRouter.post("/update-status", verifyAdmin, updateApplicationStatus); // Update application status
+cvRouter.post("/remove", verifyAdmin, uploadResume.none(), removeCV); // Delete application
+
+// Candidate routes (admin only) - NEW for normalized structure
+cvRouter.get("/candidates", verifyAdmin, listCandidates); // List all unique candidates
+cvRouter.get("/candidate/:id", verifyAdmin, getCandidate); // Get candidate with all their applications
 
 export default cvRouter;

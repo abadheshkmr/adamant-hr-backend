@@ -8,6 +8,7 @@ import connectDB from "./config/db.js";
 import cvRouter from "./routes/cvRoute.js";
 import adminRouter from "./routes/adminRoute.js";
 import vacancyRouter from "./routes/vacancyRoute.js";
+import clientRouter from "./routes/clientRoute.js";
 import { apiLimiter, speedLimiter, suspiciousActivityTracker } from "./middleware/ddosProtection.js";
 
 // app config
@@ -77,6 +78,7 @@ app.use("/api/industry", industryRouter);
 app.use("/api/cv", cvRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/vacancy", vacancyRouter);
+app.use("/api/client", clientRouter);
 
 app.get("/" , (req , res)=>{
     res.send("API Working")
