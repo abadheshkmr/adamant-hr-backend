@@ -1,6 +1,7 @@
 import express from 'express';
 import { addIndustry , getIndustry , listIndustry , removeIndustry , updateIndustry} from '../controllers/industryController.js';
 import multer from 'multer';
+import verifyAdmin from '../middleware/verifyAdmin.js';
 
 const industryRouter = express.Router();
 
@@ -15,10 +16,10 @@ const Storage = multer.diskStorage({
 
 const upload = multer({storage:Storage})
 
-industryRouter.post("/add" ,upload.single("image"),addIndustry)
-industryRouter.get("/get/:id", getIndustry);
-industryRouter.get("/list",listIndustry);
-industryRouter.post("/remove", upload.none("image") , removeIndustry);
-industryRouter.put("/update", upload.single("image") , updateIndustry);
+industryRouter.post("/add" , verifyAdmin, upload.single("image"), addIndustry)
+industryRouter.get("/get/:id", getIndustry); // Public endpoint
+industryRouter.get("/list", listIndustry); // Public endpoint
+industryRouter.post("/remove", verifyAdmin, upload.none("image") , removeIndustry);
+industryRouter.put("/update", verifyAdmin, upload.single("image") , updateIndustry);
 
 export default industryRouter;

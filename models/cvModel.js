@@ -29,7 +29,8 @@ const cvSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
       match: [/^\S+@\S+\.\S+$/, "Please enter a valid email address"],
-      unique:true,
+      // Removed unique:true - we want to allow same email for different jobs
+      // Instead, we use compound unique index on email + jobId
     },
     address: {
       type: String,
@@ -80,6 +81,9 @@ const cvSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Compound unique index: same email can apply to different jobs, but not same job twice
+cvSchema.index({ email: 1, jobId: 1 }, { unique: true });
 
 // Correct way to get or create the model
 const CVModel = mongoose.models.CV || mongoose.model("CV", cvSchema);

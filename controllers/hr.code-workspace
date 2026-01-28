@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../../hr-admin"
+		},
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../hr-frontend"
+		}
+	],
+	"settings": {}
+}

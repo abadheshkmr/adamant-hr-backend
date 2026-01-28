@@ -18,6 +18,14 @@ export const apiLimiter = rateLimit({
   skipSuccessfulRequests: false,
   // Skip rate limiting for failed requests (optional)
   skipFailedRequests: false,
+  // Skip rate limiting for public read-only endpoints
+  skip: (req) => {
+    // Allow more requests for public read-only endpoints
+    const path = req.path || req.originalUrl || '';
+    return path.includes('/api/industry/list') || 
+           path.includes('/api/service/list') ||
+           path.includes('/api/vacancy/list');
+  }
 });
 
 /**
@@ -76,6 +84,12 @@ export const speedLimiter = slowDown({
 const requestTracker = new Map();
 
 export const suspiciousActivityTracker = (req, res, next) => {
+  // Skip tracking for public read-only endpoints (they're expected to be called frequently)
+  const publicReadOnlyPaths = ['/api/industry/list', '/api/service/list', '/api/vacancy/list'];
+  if (publicReadOnlyPaths.some(path => req.path.includes(path) || req.originalUrl.includes(path))) {
+    return next(); // Skip tracking for these endpoints
+  }
+
   const ip = req.ip || req.connection.remoteAddress;
   const now = Date.now();
   const windowMs = 60 * 1000; // 1 minute window
@@ -118,3 +132,19 @@ export const suspiciousActivityTracker = (req, res, next) => {
   next();
 };
 
+/**
+ * Vacancy Detail Rate Limiter
+ * Stricter limits for individual vacancy detail views to prevent enumeration
+ */
+export const vacancyDetailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50, // Limit each IP to 50 vacancy detail views per 15 minutes
+  message: {
+    error: 'Too many requests for job details. Please try again later.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Don't count requests that result in "not found" (404) to avoid penalizing legitimate browsing
+  skipFailedRequests: false,
+});
