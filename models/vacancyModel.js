@@ -127,6 +127,18 @@ const vacancySchema = new mongoose.Schema({
         index: true
     },
     
+    // Promotion & Display Order
+    isPromoted: {
+        type: Boolean,
+        default: false,
+        index: true
+    },
+    displayOrder: {
+        type: Number,
+        default: 0,
+        index: true
+    },
+    
     // Metadata
     views: {
         type: Number,
@@ -164,6 +176,8 @@ vacancySchema.index({ createdAt: -1 }); // For sorting by creation date
 // Note: jobId already has unique index from unique: true, so we don't need to add it again
 vacancySchema.index({ client: 1, status: 1 }); // For filtering by client
 vacancySchema.index({ showClientToCandidate: 1 }); // For visibility queries
+vacancySchema.index({ isPromoted: 1, displayOrder: -1, createdAt: -1 }); // For promoted jobs sorting
+vacancySchema.index({ status: 1, isPromoted: 1, displayOrder: -1 }); // For public listing with promotion
 
 const vacancyModel = mongoose.models.vacancies || mongoose.model("vacancies", vacancySchema);
 

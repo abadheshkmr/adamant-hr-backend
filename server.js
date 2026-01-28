@@ -1,6 +1,7 @@
 import express from "express"
 import cors from "cors"
 import helmet from "helmet"
+import onHeaders from "on-headers"
 import 'dotenv/config';
 import serviceRouter from "./routes/serviceRoute.js";
 import industryRouter from "./routes/industryRoute.js";
@@ -24,9 +25,11 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
       imgSrc: ["'self'", "data:", "https:"],
+      frameSrc: ["'self'"],
     },
   },
-  crossOriginEmbedderPolicy: false, // Allow embedding if needed
+  crossOriginEmbedderPolicy: false,
+  frameguard: false, // Disable X-Frame-Options - we'll handle it per route
 }));
 
 // Trust proxy (important for rate limiting behind reverse proxy)
@@ -71,8 +74,38 @@ connectDB();
 
 
 // api endpoints
-app.use("/images",express.static('uploads'))
-app.use("/uploads/resumes", express.static("uploads/resumes"));
+// Static file routes - override CSP headers for PDFs using on-headers
+app.use("/images",express.static('uploads', {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.pdf')) {
+      // Use on-headers to override CSP right before headers are sent
+      onHeaders(res, function() {
+        this.removeHeader('Content-Security-Policy');
+        this.setHeader('Content-Security-Policy', "frame-ancestors 'self' http://localhost:3001 http://localhost:3000");
+      });
+    }
+  }
+}))
+app.use("/uploads/resumes", express.static("uploads/resumes", {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.pdf')) {
+      onHeaders(res, function() {
+        this.removeHeader('Content-Security-Policy');
+        this.setHeader('Content-Security-Policy', "frame-ancestors 'self' http://localhost:3001 http://localhost:3000");
+      });
+    }
+  }
+}));
+app.use("/uploads/applications", express.static("uploads/applications", {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.pdf')) {
+      onHeaders(res, function() {
+        this.removeHeader('Content-Security-Policy');
+        this.setHeader('Content-Security-Policy', "frame-ancestors 'self' http://localhost:3001 http://localhost:3000");
+      });
+    }
+  }
+}));
 app.use("/api/service",serviceRouter);
 app.use("/api/industry", industryRouter);
 app.use("/api/cv", cvRouter);
@@ -103,4 +136,3 @@ app.use((err, req, res, next) => {
 app.listen(port, ()=>{
     console.log(`server started on http://localhost:${port}`);
 })
-
