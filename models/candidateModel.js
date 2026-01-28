@@ -50,6 +50,16 @@ const candidateSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
+  pinCode: {
+    type: String,
+    trim: true,
+    match: [/^[0-9]{6}$/, "Pin code must be 6 digits"],
+  },
+  linkedinUrl: {
+    type: String,
+    trim: true,
+    match: [/^https?:\/\/(www\.)?linkedin\.com\/in\/[\w-]+\/?$/, "Please enter a valid LinkedIn profile URL"],
+  },
   // Education details (candidate-level, not job-specific)
   // These represent the candidate's base qualifications
   tenthPercentage: {

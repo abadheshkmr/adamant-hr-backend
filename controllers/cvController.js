@@ -1,6 +1,9 @@
 import CandidateModel from "../models/candidateModel.js";
 import ApplicationModel from "../models/applicationModel.js";
+import vacancyModel from "../models/vacancyModel.js";
 import fs from "fs";
+import path from "path";
+import fileManager from "../utils/fileManager.js";
 
 /**
  * Add CV/Application
@@ -41,6 +44,8 @@ const addCV = async (req, res) => {
         address: req.body.address,
         city: req.body.city,
         state: req.body.state,
+        pinCode: req.body.pinCode,
+        linkedinUrl: req.body.linkedinUrl || undefined,
         tenthPercentage: req.body.tenthPercentage ? parseFloat(req.body.tenthPercentage) : undefined,
         twelfthPercentage: req.body.twelfthPercentage ? parseFloat(req.body.twelfthPercentage) : undefined,
         degree: req.body.degree,
@@ -57,6 +62,8 @@ const addCV = async (req, res) => {
       if (req.body.address) updates.address = req.body.address;
       if (req.body.city) updates.city = req.body.city;
       if (req.body.state) updates.state = req.body.state;
+      if (req.body.pinCode) updates.pinCode = req.body.pinCode;
+      if (req.body.linkedinUrl !== undefined) updates.linkedinUrl = req.body.linkedinUrl || undefined;
       // Update education if provided (candidate might have completed new degree)
       if (req.body.tenthPercentage !== undefined) updates.tenthPercentage = parseFloat(req.body.tenthPercentage);
       if (req.body.twelfthPercentage !== undefined) updates.twelfthPercentage = parseFloat(req.body.twelfthPercentage);
@@ -83,14 +90,41 @@ const addCV = async (req, res) => {
       });
     }
 
-    // Step 3: Handle resume file
-    let resume_filename = req.file ? `${req.file.filename}` : null;
+    // Step 3: Fetch vacancy details to get jobTitle for folder organization
+    const vacancy = await vacancyModel.findOne({ jobId: normalizedJobId }).select('jobTitle').lean();
+    const jobTitle = vacancy?.jobTitle || `Job-${normalizedJobId}`;
 
-    // Step 4: Create application (linked to candidate)
+    // Step 4: Handle resume file - move to organized location
+    let resume_url = null;
+    if (req.file) {
+      try {
+        const tempFilePath = path.join(__dirname, '..', 'uploads', 'resumes', req.file.filename);
+        const candidateName = `${candidate.firstName} ${candidate.lastName}`;
+        
+        // Move file to organized location
+        const organizedPath = fileManager.moveToOrganizedLocation(
+          tempFilePath,
+          normalizedJobId,
+          jobTitle,
+          candidateName,
+          candidate.email,
+          'pending'
+        );
+        
+        resume_url = `uploads/${organizedPath}`;
+        console.log(`[${new Date().toISOString()}] File organized: ${resume_url}`);
+      } catch (fileError) {
+        console.error(`[${new Date().toISOString()}] Error organizing file:`, fileError);
+        // Fallback to original location if organization fails
+        resume_url = `uploads/resumes/${req.file.filename}`;
+      }
+    }
+
+    // Step 5: Create application (linked to candidate)
     const application = new ApplicationModel({
       candidateId: candidate._id,
       jobId: normalizedJobId,
-      resume: { url: resume_filename ? `uploads/resumes/${resume_filename}` : null },
+      resume: { url: resume_url },
       status: 'pending',
       appliedAt: new Date()
     });
@@ -439,7 +473,55 @@ const updateApplicationStatus = async (req, res) => {
       });
     }
     
-    const updateData = { status };
+    // Get existing application with candidate and vacancy details
+    const existingApplication = await ApplicationModel.findById(id)
+      .populate('candidateId', 'firstName lastName email')
+      .lean();
+    
+    if (!existingApplication) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Application not found" 
+      });
+    }
+    
+    // If status is changing and file exists, move it to new status folder
+    let resumeUrl = existingApplication.resume?.url;
+    if (existingApplication.status !== status && existingApplication.resume?.url) {
+      try {
+        // Fetch vacancy details for folder organization
+        const vacancy = await vacancyModel.findOne({ jobId: existingApplication.jobId })
+          .select('jobTitle')
+          .lean();
+        const jobTitle = vacancy?.jobTitle || `Job-${existingApplication.jobId}`;
+        
+        const candidate = existingApplication.candidateId;
+        const candidateName = `${candidate.firstName} ${candidate.lastName}`;
+        const oldFilePath = path.join(__dirname, '..', existingApplication.resume.url);
+        
+        // Move file to new status folder
+        const newPath = fileManager.moveFileOnStatusChange(
+          oldFilePath,
+          existingApplication.jobId,
+          jobTitle,
+          candidateName,
+          candidate.email,
+          existingApplication.status,
+          status
+        );
+        
+        resumeUrl = `uploads/${newPath}`;
+        console.log(`[${new Date().toISOString()}] File moved from ${existingApplication.status} to ${status}: ${resumeUrl}`);
+      } catch (fileError) {
+        console.error(`[${new Date().toISOString()}] Error moving file on status change:`, fileError);
+        // Continue with status update even if file move fails
+      }
+    }
+    
+    const updateData = { 
+      status,
+      ...(resumeUrl && { resume: { url: resumeUrl } })
+    };
     if (notes !== undefined) updateData.notes = notes;
     
     const application = await ApplicationModel.findByIdAndUpdate(
@@ -447,13 +529,6 @@ const updateApplicationStatus = async (req, res) => {
       updateData,
       { new: true }
     ).populate('candidateId', 'firstName lastName email');
-    
-    if (!application) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Application not found" 
-      });
-    }
     
     res.json({ 
       success: true, 
@@ -485,11 +560,14 @@ const removeCV = async (req, res) => {
       return res.json({ success: false, message: "Application not found" });
     }
 
-    // Delete resume file if it exists
+    // Delete resume file if it exists using fileManager
     if (application.resume?.url) {
-      fs.unlink(application.resume.url, (err) => {
-        if (err) console.error(`Error deleting file ${application.resume.url}:`, err);
-      });
+      const deleted = fileManager.deleteFile(application.resume.url);
+      if (deleted) {
+        console.log(`[${new Date().toISOString()}] File deleted: ${application.resume.url}`);
+      } else {
+        console.warn(`[${new Date().toISOString()}] File not found or already deleted: ${application.resume.url}`);
+      }
     }
 
     // Delete application (candidate record remains)
@@ -503,4 +581,97 @@ const removeCV = async (req, res) => {
   }
 };
 
-export { addCV, getCV, listCVs, listCandidates, getCandidate, updateApplicationStatus, removeCV };
+/**
+ * Get Application Count for a Job
+ * Public endpoint - returns count of applications for a specific job
+ * Returns null if count is 0 (no applications)
+ */
+const getApplicationCount = async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    
+    if (!jobId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Job ID is required" 
+      });
+    }
+
+    const normalizedJobId = jobId.toString().trim();
+    
+    // Count applications for this job
+    const count = await ApplicationModel.countDocuments({ 
+      jobId: normalizedJobId 
+    });
+
+    // Only return count if > 0, otherwise return null
+    res.json({ 
+      success: true, 
+      count: count > 0 ? count : null 
+    });
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Get Application Count Error:`, error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Error fetching application count" 
+    });
+  }
+};
+
+/**
+ * Get Application Counts for Multiple Jobs (Batch)
+ * Public endpoint - returns counts of applications for multiple jobs
+ * Only returns counts > 0 (jobs with no applications are excluded)
+ */
+const getApplicationCountsBatch = async (req, res) => {
+  try {
+    const { jobIds } = req.body;
+    
+    if (!jobIds || !Array.isArray(jobIds) || jobIds.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Job IDs array is required" 
+      });
+    }
+
+    // Normalize jobIds
+    const normalizedJobIds = jobIds.map(id => id.toString().trim());
+    
+    // Count applications for each job using aggregation
+    const counts = await ApplicationModel.aggregate([
+      {
+        $match: {
+          jobId: { $in: normalizedJobIds }
+        }
+      },
+      {
+        $group: {
+          _id: "$jobId",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Convert to object format: { jobId: count }
+    // Only include jobs with count > 0
+    const result = {};
+    counts.forEach(item => {
+      if (item.count > 0) {
+        result[item._id] = item.count;
+      }
+    });
+
+    res.json({ 
+      success: true, 
+      counts: result 
+    });
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Get Application Counts Batch Error:`, error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Error fetching application counts" 
+    });
+  }
+};
+
+export { addCV, getCV, listCVs, listCandidates, getCandidate, updateApplicationStatus, removeCV, getApplicationCount, getApplicationCountsBatch };

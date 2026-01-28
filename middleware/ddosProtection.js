@@ -132,3 +132,19 @@ export const suspiciousActivityTracker = (req, res, next) => {
   next();
 };
 
+/**
+ * Vacancy Detail Rate Limiter
+ * Stricter limits for individual vacancy detail views to prevent enumeration
+ */
+export const vacancyDetailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50, // Limit each IP to 50 vacancy detail views per 15 minutes
+  message: {
+    error: 'Too many requests for job details. Please try again later.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Don't count requests that result in "not found" (404) to avoid penalizing legitimate browsing
+  skipFailedRequests: false,
+});

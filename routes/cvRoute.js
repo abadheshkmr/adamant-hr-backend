@@ -1,5 +1,5 @@
 import express from "express";
-import { addCV, getCV, listCVs, listCandidates, getCandidate, updateApplicationStatus, removeCV } from "../controllers/cvController.js";
+import { addCV, getCV, listCVs, listCandidates, getCandidate, updateApplicationStatus, removeCV, getApplicationCount, getApplicationCountsBatch } from "../controllers/cvController.js";
 import multer from "multer";
 import ApplicationModel from "../models/applicationModel.js";
 import CandidateModel from "../models/candidateModel.js";
@@ -72,6 +72,10 @@ const handleMulterError = (err, req, res, next) => {
 };
 
 // Routes
+// Public endpoint for application count
+cvRouter.get("/count/:jobId", getApplicationCount); // Get application count for a job (public)
+cvRouter.post("/counts/batch", getApplicationCountsBatch); // Get application counts for multiple jobs (public)
+
 // Apply upload rate limiting to file upload endpoints
 // Note: Error handler must come after multer middleware
 cvRouter.post("/add", uploadLimiter, (req, res, next) => {
