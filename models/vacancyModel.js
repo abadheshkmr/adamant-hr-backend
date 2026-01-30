@@ -29,6 +29,13 @@ const vacancySchema = new mongoose.Schema({
         required: false, // Optional - some vacancies may not have a client
         index: true
     },
+    // Optional: Company profile for "Company Info" section. If null, use client.companyId when available.
+    company: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'companies',
+        required: false,
+        index: true
+    },
     showClientToCandidate: {
         type: Boolean,
         default: false // Hidden by default
@@ -49,7 +56,18 @@ const vacancySchema = new mongoose.Schema({
         type: String,
         trim: true
     }], // Array of required skills
-    
+    benefits: [{
+        type: String,
+        trim: true,
+        maxlength: 200
+    }], // Benefits & perks for this role (optional list)
+    specialNote: {
+        type: String,
+        trim: true,
+        maxlength: 2000,
+        default: ''
+    }, // Optional note shown on job page (e.g. notice, disclaimer)
+
     // Location Information
     location: {
         city: {

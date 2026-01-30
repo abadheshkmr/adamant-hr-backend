@@ -1,94 +1,61 @@
 
-import jwt from 'jsonwebtoken';
+import { verifyFirebaseToken } from './verifyFirebaseUser.js';
 
-const admin_username = process.env.ADMINNAME;
-const admin_password = process.env.PASSWORD;
-const hash = process.env.hash;
+function parseListEnv(name) {
+  return (process.env[name] || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
 
+function emailDomain(email) {
+  const at = (email || '').lastIndexOf('@');
+  if (at === -1) return '';
+  return email.slice(at + 1).toLowerCase();
+}
 
+export function requireAdminRole(allowedRoles = ['hr', 'admin', 'superadmin']) {
+  return async (req, res, next) => {
+    await verifyFirebaseToken(req, res, async () => {
+      try {
+        const email = req.firebaseUser?.email;
+        const role = req.firebaseUser?.role || null;
+        const token = req.firebaseToken || {};
 
+        if (!email) {
+          return res.status(401).json({ success: false, message: 'Access denied. Email not present on token.' });
+        }
 
-const verifyAdmin = async (req, res, next) => {
-  try {
-    // Get token from Authorization header (Bearer token format)
-    const authHeader = req.header("Authorization");
-    
-    if (!authHeader) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Access denied. No token provided." });
-    }
+        const allowedDomains = parseListEnv('INTERNAL_EMAIL_DOMAINS');
+        if (allowedDomains.length === 0) {
+          return res.status(503).json({ success: false, message: 'Admin domain allowlist not configured' });
+        }
+        const domain = emailDomain(email);
+        if (!allowedDomains.includes(domain)) {
+          return res.status(403).json({ success: false, message: 'Forbidden. Email domain not allowed.' });
+        }
 
-    // Extract token from "Bearer <token>"
-    const token = authHeader.startsWith("Bearer ") 
-      ? authHeader.slice(7).trim() 
-      : authHeader.trim(); // Fallback for backward compatibility
+        // Bootstrap: allow listed superadmin emails even if role claim missing
+        const superAdmins = parseListEnv('INTERNAL_SUPERADMINS');
+        const effectiveRole = role || (superAdmins.includes(email.toLowerCase()) ? 'superadmin' : null);
 
-    // Validate token format (basic check - JWT should have 3 parts separated by dots)
-    if (!token || token === "null" || token === "undefined" || token.length < 10) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Access denied. Invalid token format." });
-    }
+        if (!effectiveRole || !allowedRoles.includes(effectiveRole)) {
+          return res.status(403).json({ success: false, message: 'Forbidden. Insufficient role.' });
+        }
 
-    // Check if token looks like a JWT (has 3 parts separated by dots)
-    const tokenParts = token.split('.');
-    if (tokenParts.length !== 3) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Access denied. Malformed token." });
-    }
-
-    // Verify token
-    let decoded;
-    try {
-      decoded = jwt.verify(token, hash);
-    } catch (jwtError) {
-      // Handle specific JWT errors
-      if (jwtError.name === 'JsonWebTokenError') {
-        return res.status(401).json({ 
-          success: false, 
-          message: "Access denied. Invalid token signature." 
-        });
-      } else if (jwtError.name === 'TokenExpiredError') {
-        return res.status(401).json({ 
-          success: false, 
-          message: "Access denied. Token has expired. Please login again." 
-        });
-      } else {
-        return res.status(401).json({ 
-          success: false, 
-          message: "Access denied. Token verification failed." 
-        });
+        req.admin = {
+          uid: token.uid || req.firebaseUser?.uid,
+          email,
+          role: effectiveRole,
+        };
+        return next();
+      } catch (err) {
+        console.error('[verifyAdmin] Error:', err?.message, err?.stack);
+        return res.status(401).json({ success: false, message: 'Access denied. Authentication failed.' });
       }
-    }
-    
-    // Validate decoded token structure
-    if (!decoded || !decoded.user) {
-      return res.status(401).json({ 
-        success: false, 
-        message: "Access denied. Invalid token structure." 
-      });
-    }
-    
-    const { id: email, password } = decoded.user;
-    if (email === admin_username && password === admin_password) {
-      // Pass user info to next middleware or route
-      req.admin = decoded.user;
-      return next();
-    } else {
-      return res.status(403).json({
-        success: false,
-        message: "Forbidden. You are not authorized as admin.",
-      });
-    }
-  } catch (err) {
-    console.error(`[${new Date().toISOString()}] verifyAdmin Error:`, err);
-    return res.status(401).json({ 
-      success: false, 
-      message: "Access denied. Authentication failed." 
     });
-  }
-};
+  };
+}
 
-export default verifyAdmin;
+// Default: any internal admin role can access admin-protected routes
+export default requireAdminRole(['hr', 'admin', 'superadmin']);

@@ -9,6 +9,8 @@ import cvRouter from "./routes/cvRoute.js";
 import adminRouter from "./routes/adminRoute.js";
 import vacancyRouter from "./routes/vacancyRoute.js";
 import clientRouter from "./routes/clientRoute.js";
+import companyRouter from "./routes/companyRoute.js";
+import candidateRouter from "./routes/candidateRoute.js";
 import { apiLimiter, speedLimiter, suspiciousActivityTracker } from "./middleware/ddosProtection.js";
 
 // app config
@@ -40,24 +42,28 @@ app.use(apiLimiter);
 // Standard middleware
 app.use(express.json({ limit: '10mb' })) // Limit JSON payload size
 
-// CORS configuration - allow both frontend and admin panel
+// CORS configuration - allow frontend, admin panel, and candidate portal
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3000',
   process.env.ADMIN_URL || 'http://localhost:3001',
+  process.env.CANDIDATE_PORTAL_URL,
   'http://localhost:3000',
-  'http://localhost:3001'
+  'http://localhost:3001',
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+  'http://127.0.0.1:5173',
 ].filter(Boolean); // Remove any undefined values
 
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
+    if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
+    // In development, allow localhost and 127.0.0.1 on any port
+    if (process.env.NODE_ENV === 'development') return callback(null, true);
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   optionsSuccessStatus: 200
@@ -79,6 +85,8 @@ app.use("/api/cv", cvRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/vacancy", vacancyRouter);
 app.use("/api/client", clientRouter);
+app.use("/api/company", companyRouter);
+app.use("/api/candidate", candidateRouter);
 
 app.get("/" , (req , res)=>{
     res.send("API Working")

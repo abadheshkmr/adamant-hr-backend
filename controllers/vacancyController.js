@@ -1,6 +1,7 @@
 import vacancyModel from "../models/vacancyModel.js";
 import industryModel from "../models/industryModel.js";
 import ClientModel from "../models/clientModel.js";
+import CompanyModel from "../models/companyModel.js";
 import mongoose from "mongoose";
 
 // Helper function to check if request is from admin
@@ -29,6 +30,14 @@ const addVacancy = async (req , res) => {
             }
         }
 
+        // Validate company if provided
+        if (req.body.company) {
+            const companyExists = await CompanyModel.findById(req.body.company);
+            if (!companyExists) {
+                return res.json({success: false, message: "Invalid company selected"});
+            }
+        }
+
         // Get the count of existing vacancies to generate jobId
         const lastVacancy = await vacancyModel.findOne().sort({ jobId: -1 }).select("jobId");
         const jobId = lastVacancy ? lastVacancy.jobId + 1 : 1;
@@ -39,8 +48,11 @@ const addVacancy = async (req , res) => {
             qualification: req.body.qualification,
             industry: req.body.industry || null,
             client: req.body.client || null,
+            company: req.body.company || null,
             showClientToCandidate: req.body.showClientToCandidate === true || req.body.showClientToCandidate === 'true',
             skills: req.body.skills || [],
+            benefits: Array.isArray(req.body.benefits) ? req.body.benefits : [],
+            specialNote: req.body.specialNote || '',
             location: {
                 city: req.body.city || '',
                 state: req.body.state || '',
@@ -156,27 +168,27 @@ const listVacancy = async (req,res) => {
         const total = await vacancyModel.countDocuments(filter);
         console.log(`[${new Date().toISOString()}] Total vacancies found: ${total}`);
         
-        // Fetch with pagination, filters, and populate industry and client
+        // Fetch with pagination, filters, and populate industry, company, and client (with company)
         let vacancies = await vacancyModel
             .find(filter)
-            .populate('industry', 'name image') // Populate industry name and image
-            .populate('client', 'name') // Populate client name
-            .select('jobTitle description qualification jobId createdAt industry location employmentType experienceLevel salary applicationDeadline numberOfOpenings skills client showClientToCandidate')
+            .populate('industry', 'name image')
+            .populate('company', 'name description founded employees logo website benefits culture image')
+            .populate({ path: 'client', select: 'name companyId', populate: { path: 'companyId', select: 'name description founded employees logo website benefits culture image' } })
+            .select('jobTitle description qualification jobId createdAt industry location employmentType experienceLevel salary applicationDeadline numberOfOpenings skills benefits specialNote client company showClientToCandidate')
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
-            .lean(); // Use lean() for faster queries (returns plain JS objects)
+            .lean();
 
-        // Remove client info from public responses unless showClientToCandidate is true
-        if (!isAdmin) {
-            vacancies = vacancies.map(vacancy => {
-                if (!vacancy.showClientToCandidate) {
-                    delete vacancy.client;
-                }
-                delete vacancy.showClientToCandidate; // Never expose this flag to public
-                return vacancy;
-            });
-        }
+        // Resolve company: vacancy.company ?? client.companyId (so job can have independent company or inherit from client)
+        vacancies = vacancies.map((v) => {
+            v.company = v.company || (v.client && v.client.companyId) || null;
+            if (!isAdmin) {
+                if (!v.showClientToCandidate) delete v.client;
+                delete v.showClientToCandidate;
+            }
+            return v;
+        });
 
         console.log(`[${new Date().toISOString()}] Returning ${vacancies.length} vacancies`);
 
@@ -213,23 +225,27 @@ const getVacancy = async (req, res) => {
         const id = req.params.id;
         const isAdmin = isAdminRequest(req);
 
+        const companyFields = 'name description founded employees logo website benefits culture image';
+        const clientPopulate = isAdmin
+            ? { path: 'client', select: 'name description contactPerson email phone address website isActive companyId', populate: { path: 'companyId', select: companyFields } }
+            : { path: 'client', select: 'name companyId', populate: { path: 'companyId', select: companyFields } };
+
         // Check if id is a valid MongoDB ObjectId (24 character hex string)
         if (mongoose.Types.ObjectId.isValid(id) && id.length === 24) {
-            // Try to find by MongoDB _id
-            // For admin requests, return all fields; for public, filter client
             vacancy = await vacancyModel
                 .findById(id)
                 .populate('industry', 'name description image list')
-                .populate('client', 'name description contactPerson email phone address website isActive') // Populate full client data for admin
+                .populate('company', companyFields)
+                .populate(clientPopulate)
                 .lean();
         } else {
-            // If not a valid ObjectId, try to find by numeric jobId
             const jobId = parseInt(id);
             if (!isNaN(jobId)) {
                 vacancy = await vacancyModel
                     .findOne({ jobId: jobId })
                     .populate('industry', 'name description image list')
-                    .populate('client', 'name description contactPerson email phone address website isActive') // Populate full client data for admin
+                    .populate('company', companyFields)
+                    .populate(clientPopulate)
                     .lean();
             }
         }
@@ -238,12 +254,15 @@ const getVacancy = async (req, res) => {
             return res.json({ success: false, message: "Vacancy not found" });
         }
 
+        // Resolve company: vacancy.company ?? client.companyId (independent company or client-as-company)
+        vacancy.company = vacancy.company || (vacancy.client && vacancy.client.companyId) || null;
+
         // Remove client info from public responses unless showClientToCandidate is true
         if (!isAdmin) {
             if (!vacancy.showClientToCandidate) {
                 delete vacancy.client;
             }
-            delete vacancy.showClientToCandidate; // Never expose this flag to public
+            delete vacancy.showClientToCandidate;
         }
 
         // Increment views (use _id for update)
@@ -291,6 +310,7 @@ const updateVacancy = async (req, res) => {
         if (req.body.jobTitle !== undefined) updateData.jobTitle = req.body.jobTitle;
         if (req.body.description !== undefined) updateData.description = req.body.description;
         if (req.body.qualification !== undefined) updateData.qualification = req.body.qualification;
+        if (req.body.specialNote !== undefined) updateData.specialNote = req.body.specialNote ?? '';
         
         // Industry - validate if provided
         if (req.body.industry !== undefined) {
@@ -322,10 +342,26 @@ const updateVacancy = async (req, res) => {
         if (req.body.showClientToCandidate !== undefined) {
             updateData.showClientToCandidate = req.body.showClientToCandidate === true || req.body.showClientToCandidate === 'true';
         }
-        
+
+        // Company (for Company Info on job) - validate if provided
+        if (req.body.company !== undefined) {
+            if (req.body.company === null || req.body.company === '') {
+                updateData.company = null;
+            } else {
+                const companyExists = await CompanyModel.findById(req.body.company);
+                if (!companyExists) {
+                    return res.json({ success: false, message: "Invalid company selected" });
+                }
+                updateData.company = req.body.company;
+            }
+        }
+
         // Skills - only update if provided
         if (req.body.skills !== undefined) {
             updateData.skills = Array.isArray(req.body.skills) ? req.body.skills : [];
+        }
+        if (req.body.benefits !== undefined) {
+            updateData.benefits = Array.isArray(req.body.benefits) ? req.body.benefits : [];
         }
         
         // Location - only update if any location field is provided

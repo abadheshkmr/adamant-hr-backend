@@ -16,7 +16,8 @@ const addClient = async (req, res) => {
       phone: req.body.phone,
       address: req.body.address,
       website: req.body.website,
-      isActive: req.body.isActive !== undefined ? req.body.isActive : true
+      isActive: req.body.isActive !== undefined ? req.body.isActive : true,
+      companyId: req.body.companyId || null
     });
 
     await client.save();

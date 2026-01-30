@@ -49,7 +49,21 @@ const clientSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
     index: true
-  }
+  },
+  // Firebase Auth UID - links client to Firebase user for portal login
+  firebaseUid: {
+    type: String,
+    trim: true,
+    sparse: true,
+    unique: true,
+  },
+  // Optional link to a Company profile (client can also be a company)
+  companyId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'companies',
+    default: null,
+    index: true,
+  },
 }, {
   timestamps: true
 });

@@ -71,13 +71,32 @@ const candidateSchema = new mongoose.Schema({
     min: 0,
     max: 10,
   },
+  // Firebase Auth UID - links candidate to Firebase user for portal login
+  firebaseUid: {
+    type: String,
+    trim: true,
+    sparse: true,
+    unique: true,
+  },
+  // Primary resume (Firebase Storage) - used for dashboard download/upload
+  resume: {
+    storagePath: { type: String, trim: true },
+    fileName: { type: String, trim: true },
+    uploadedAt: { type: Date },
+  },
+  // Documents (PAN, AADHAR, marksheets) - stored in Firebase Storage
+  documents: [{
+    docType: { type: String, trim: true, required: true }, // 'PAN', 'AADHAR', 'marksheet'
+    storagePath: { type: String, trim: true, required: true },
+    fileName: { type: String, trim: true, required: true },
+    uploadedAt: { type: Date, default: Date.now },
+  }],
 }, {
   timestamps: true
 });
 
-// Indexes for efficient queries
-// Note: email already has unique index from unique: true, so we don't need to add it again
-candidateSchema.index({ createdAt: -1 }); // For sorting by registration date
+// Indexes for efficient queries (firebaseUid has unique index from schema)
+candidateSchema.index({ createdAt: -1 });
 
 const CandidateModel = mongoose.models.candidates || mongoose.model("candidates", candidateSchema);
 

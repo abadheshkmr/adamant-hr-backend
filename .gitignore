@@ -11,6 +11,10 @@ yarn-error.log*
 # Environment variables
 .env
 .env.local
+
+# Firebase service account (never commit)
+firebase-service-account.json
+*service*account*.json
 .env.development.local
 .env.test.local
 .env.production.local
