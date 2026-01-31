@@ -1,4 +1,5 @@
 import express from "express";
+import fs from "fs";
 import { addCV, getCV, listCVs, listCandidates, getCandidate, updateApplicationStatus, removeCV } from "../controllers/cvController.js";
 import multer from "multer";
 import ApplicationModel from "../models/applicationModel.js";
@@ -8,16 +9,22 @@ import verifyAdmin from "../middleware/verifyAdmin.js";
 
 const cvRouter = express.Router();
 
-// Resume Storage Engine
-const resumeStorage = multer.diskStorage({
-  destination: "uploads/resumes", // different folder for resumes
+// Resume + Cover Letter storage (different folders by field name)
+const applicationFileStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = file.fieldname === 'coverLetter' ? 'uploads/coverLetters' : 'uploads/resumes';
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch (e) { /* ignore */ }
+    cb(null, dir);
+  },
   filename: (req, file, cb) => {
     cb(null, `${Date.now()}-${file.originalname}`);
   },
 });
 
 const uploadResume = multer({
-  storage: resumeStorage,
+  storage: applicationFileStorage,
   fileFilter: async (req, file, cb) => {
     try {
       // Check for duplicates: same candidate + jobId combination
@@ -73,9 +80,9 @@ const handleMulterError = (err, req, res, next) => {
 
 // Routes
 // Apply upload rate limiting to file upload endpoints
-// Note: Error handler must come after multer middleware
+// Note: Error handler must come after multer middleware (resume required, coverLetter optional)
 cvRouter.post("/add", uploadLimiter, (req, res, next) => {
-  uploadResume.single("resume")(req, res, (err) => {
+  uploadResume.fields([{ name: 'resume', maxCount: 1 }, { name: 'coverLetter', maxCount: 1 }])(req, res, (err) => {
     if (err) {
       return handleMulterError(err, req, res, next);
     }

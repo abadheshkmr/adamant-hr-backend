@@ -11,7 +11,7 @@ import mongoose from "mongoose";
  * - Stores job-specific data: jobId, resume, status, notes
  * - Compound unique index prevents duplicate applications (same candidate + same job)
  */
-const resumeSubSchema = new mongoose.Schema({
+const fileAttachmentSubSchema = new mongoose.Schema({
   url: { type: String, trim: true },
   data: { type: Buffer },
   contentType: { type: String, trim: true },
@@ -31,7 +31,11 @@ const applicationSchema = new mongoose.Schema({
     index: true
   },
   resume: {
-    type: resumeSubSchema,
+    type: fileAttachmentSubSchema,
+    default: {},
+  },
+  coverLetter: {
+    type: fileAttachmentSubSchema,
     default: {},
   },
   // Job-specific education details (optional - if job requires different info than candidate's base)

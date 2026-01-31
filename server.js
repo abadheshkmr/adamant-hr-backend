@@ -1,7 +1,14 @@
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+dotenv.config({ path: join(__dirname, '.env') });
+
 import express from "express"
 import cors from "cors"
 import helmet from "helmet"
-import 'dotenv/config';
 import serviceRouter from "./routes/serviceRoute.js";
 import industryRouter from "./routes/industryRoute.js";
 import connectDB from "./config/db.js";
@@ -11,7 +18,9 @@ import vacancyRouter from "./routes/vacancyRoute.js";
 import clientRouter from "./routes/clientRoute.js";
 import companyRouter from "./routes/companyRoute.js";
 import candidateRouter from "./routes/candidateRoute.js";
+import jobAlertRouter from "./routes/jobAlertRoute.js";
 import { apiLimiter, speedLimiter, suspiciousActivityTracker } from "./middleware/ddosProtection.js";
+import { processScheduledAlerts } from "./services/jobAlertService.js";
 
 // app config
 
@@ -74,11 +83,24 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' })); // Limit URL-enc
 
 connectDB();
 
-
+// Job alerts cron: run scheduled alerts (daily/weekly) every hour
+const CRON_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+setInterval(() => {
+  processScheduledAlerts().catch((err) =>
+    console.error('[jobAlert cron]', err?.message)
+  );
+}, CRON_INTERVAL_MS);
+// Run once shortly after startup (after DB is ready)
+setTimeout(() => {
+  processScheduledAlerts().catch((err) =>
+    console.error('[jobAlert cron]', err?.message)
+  );
+}, 30 * 1000);
 
 // api endpoints
 app.use("/images",express.static('uploads'))
 app.use("/uploads/resumes", express.static("uploads/resumes"));
+app.use("/uploads/coverLetters", express.static("uploads/coverLetters"));
 app.use("/api/service",serviceRouter);
 app.use("/api/industry", industryRouter);
 app.use("/api/cv", cvRouter);
@@ -87,6 +109,7 @@ app.use("/api/vacancy", vacancyRouter);
 app.use("/api/client", clientRouter);
 app.use("/api/company", companyRouter);
 app.use("/api/candidate", candidateRouter);
+app.use("/api/job-alert", jobAlertRouter);
 
 app.get("/" , (req , res)=>{
     res.send("API Working")

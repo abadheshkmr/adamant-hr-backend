@@ -83,14 +83,21 @@ const addCV = async (req, res) => {
       });
     }
 
-    // Step 3: Handle resume file
-    let resume_filename = req.file ? `${req.file.filename}` : null;
+    // Step 3: Handle resume and cover letter files (multer .fields() gives req.files)
+    const resumeFile = req.files?.resume?.[0];
+    const coverLetterFile = req.files?.coverLetter?.[0];
+    if (!resumeFile) {
+      return res.status(400).json({ success: false, message: "Resume is required" });
+    }
+    const resumeUrl = resumeFile.path || `uploads/resumes/${resumeFile.filename}`;
+    const coverLetterUrl = coverLetterFile ? (coverLetterFile.path || `uploads/coverLetters/${coverLetterFile.filename}`) : null;
 
     // Step 4: Create application (linked to candidate)
     const application = new ApplicationModel({
       candidateId: candidate._id,
       jobId: normalizedJobId,
-      resume: { url: resume_filename ? `uploads/resumes/${resume_filename}` : null },
+      resume: { url: resumeUrl },
+      coverLetter: coverLetterUrl ? { url: coverLetterUrl } : {},
       status: 'pending',
       appliedAt: new Date()
     });
@@ -485,10 +492,15 @@ const removeCV = async (req, res) => {
       return res.json({ success: false, message: "Application not found" });
     }
 
-    // Delete resume file if it exists
+    // Delete resume and cover letter files if they exist
     if (application.resume?.url) {
       fs.unlink(application.resume.url, (err) => {
         if (err) console.error(`Error deleting file ${application.resume.url}:`, err);
+      });
+    }
+    if (application.coverLetter?.url) {
+      fs.unlink(application.coverLetter.url, (err) => {
+        if (err) console.error(`Error deleting file ${application.coverLetter.url}:`, err);
       });
     }
 

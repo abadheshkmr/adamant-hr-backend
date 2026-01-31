@@ -39,6 +39,7 @@ export const verifyFirebaseToken = async (req, res, next) => {
       name: decoded.name || null,
       picture: decoded.picture || null,
       role: decoded.role || null,
+      phone_number: decoded.phone_number || decoded.firebase?.sign_in_attributes?.phone_number || null,
     };
     next();
   } catch (err) {
@@ -70,7 +71,7 @@ export const verifyFirebaseCandidate = async (req, res, next) => {
         console.warn('[verifyFirebaseCandidate] 403 No candidate linked for this Firebase UID:', { uid });
         return res.status(403).json({
           success: false,
-          message: 'No candidate account linked to this login. Please register with the same email you used to apply.',
+          message: 'Complete your profile first. Go to the registration page and enter your name, email, and phone.',
         });
       }
       req.candidate = candidate;

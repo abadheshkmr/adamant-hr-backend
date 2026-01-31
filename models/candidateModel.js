@@ -36,7 +36,8 @@ const candidateSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true,
-    match: [/^\+?[0-9]{7,15}$/, "Please enter a valid mobile number"],
+    // Stored as digits only (10-15); + is added only for display. Allow optional + for backward compatibility.
+    match: [/^\+?[0-9]{10,15}$/, "Please enter a valid mobile number (10-15 digits)"],
   },
   address: {
     type: String,

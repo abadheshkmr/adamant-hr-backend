@@ -13,6 +13,60 @@ function emailDomain(email) {
   return email.slice(at + 1).toLowerCase();
 }
 
+const ALLOWED_ADMIN_ROLES = ['hr', 'admin', 'superadmin'];
+
+/** Returns true if uid belongs to an internal admin user (allowed domain + role). Used to validate recruiterUid on jobs. */
+export async function isInternalUser(uid) {
+  if (!uid || typeof uid !== 'string') return false;
+  try {
+    const init = initFirebaseAdmin();
+    if (!init.firebaseInitialized) return false;
+    const allowedDomains = parseListEnv('INTERNAL_EMAIL_DOMAINS');
+    if (allowedDomains.length === 0) return false;
+    const admin = getFirebaseAdmin();
+    const user = await admin.auth().getUser(uid);
+    const domain = emailDomain(user.email);
+    if (!domain || !allowedDomains.includes(domain)) return false;
+    const role = user.customClaims?.role || (parseListEnv('INTERNAL_SUPERADMINS').includes((user.email || '').toLowerCase()) ? 'superadmin' : null);
+    return !!role && ALLOWED_ADMIN_ROLES.includes(role);
+  } catch {
+    return false;
+  }
+}
+
+/** Returns list of internal users (allowed domain + has role). Used by listInternalUsers and by recruiter dropdown. */
+export async function getInternalUsersList() {
+  const init = initFirebaseAdmin();
+  if (!init.firebaseInitialized) return [];
+  const allowedDomains = parseListEnv('INTERNAL_EMAIL_DOMAINS');
+  if (allowedDomains.length === 0) return [];
+  const admin = getFirebaseAdmin();
+  const users = [];
+  let pageToken;
+  do {
+    const result = await admin.auth().listUsers(500, pageToken);
+    for (const u of result.users) {
+      const domain = emailDomain(u.email);
+      if (domain && allowedDomains.includes(domain)) {
+        const role = u.customClaims?.role || (parseListEnv('INTERNAL_SUPERADMINS').includes((u.email || '').toLowerCase()) ? 'superadmin' : null);
+        if (role && ALLOWED_ADMIN_ROLES.includes(role)) {
+          users.push({
+            uid: u.uid,
+            email: u.email,
+            displayName: u.displayName || null,
+            photoURL: u.photoURL || null,
+            role,
+            disabled: u.disabled || false,
+          });
+        }
+      }
+    }
+    pageToken = result.pageToken;
+  } while (pageToken);
+  users.sort((a, b) => (a.email || '').localeCompare(b.email || ''));
+  return users;
+}
+
 export async function verifyAdminAuth(req, res) {
   try {
     const init = initFirebaseAdmin();
@@ -147,40 +201,29 @@ export async function setUserDisabled(req, res) {
 
 export async function listInternalUsers(req, res) {
   try {
-    const init = initFirebaseAdmin();
-    if (!init.firebaseInitialized) {
-      return res.status(503).json({ success: false, message: 'Firebase auth not configured' });
-    }
-
-    const allowedDomains = parseListEnv('INTERNAL_EMAIL_DOMAINS');
-    if (allowedDomains.length === 0) {
-      return res.json({ success: true, data: [] });
-    }
-
-    const admin = getFirebaseAdmin();
-    const users = [];
-    let pageToken;
-    do {
-      const result = await admin.auth().listUsers(500, pageToken);
-      for (const u of result.users) {
-        const domain = emailDomain(u.email);
-        if (domain && allowedDomains.includes(domain)) {
-          users.push({
-            uid: u.uid,
-            email: u.email,
-            role: u.customClaims?.role || null,
-            disabled: u.disabled || false,
-          });
-        }
-      }
-      pageToken = result.pageToken;
-    } while (pageToken);
-
-    users.sort((a, b) => (a.email || '').localeCompare(b.email || ''));
-
+    const users = await getInternalUsersList();
     return res.json({ success: true, data: users });
   } catch (err) {
     console.error('[listInternalUsers]', err?.message, err?.stack);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+}
+
+/** GET /api/admin/internal-users - list internal users for vacancy dropdown (assignable as recruiter). Callable by superadmin/admin/hr. */
+export async function listInternalUsersForAssignment(req, res) {
+  try {
+    const users = await getInternalUsersList();
+    const data = users
+      .filter((u) => !u.disabled)
+      .map(({ uid, email, displayName, photoURL }) => ({
+        uid,
+        email: email || null,
+        displayName: displayName || null,
+        photoURL: photoURL || null,
+      }));
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('[listInternalUsersForAssignment]', err?.message, err?.stack);
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 }

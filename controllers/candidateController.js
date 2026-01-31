@@ -1,6 +1,8 @@
 import CandidateModel from '../models/candidateModel.js';
 import ApplicationModel from '../models/applicationModel.js';
 import VacancyModel from '../models/vacancyModel.js';
+import { verifyAndConsumeEmailOtp, verifyAndConsumePhoneOtp } from '../controllers/emailOtpController.js';
+import { getFirebaseAdmin, initFirebaseAdmin } from '../utils/firebaseAdmin.js';
 import { readFile } from 'fs/promises';
 import fs from 'fs';
 import { join } from 'path';
@@ -9,73 +11,333 @@ import { dirname } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+/** Normalize phone to digits only (no + or spaces). Stored in DB without +; add + only for display. */
+function normalizePhoneToDigits(phone) {
+  if (!phone || typeof phone !== 'string') return '';
+  return phone.replace(/\D/g, '');
+}
+
+const PHONE_DIGITS_REGEX = /^[0-9]{10,15}$/;
+
+function getPhoneRegion() {
+  const v = (process.env.PHONE_REGION || 'US').toUpperCase();
+  return v === 'IN' ? 'IN' : 'US';
+}
+
+function validatePhoneByRegion(digits) {
+  const region = getPhoneRegion();
+  if (region === 'IN') {
+    return /^91[0-9]{10}$/.test(digits);
+  }
+  if (region === 'US') {
+    return /^1[0-9]{10}$/.test(digits);
+  }
+  return PHONE_DIGITS_REGEX.test(digits);
+}
+
+function getPhoneValidationMessage() {
+  const region = getPhoneRegion();
+  if (region === 'IN') return 'Valid Indian number required (12 digits, e.g. 919876543210)';
+  if (region === 'US') return 'Valid US number required (11 digits, e.g. 14692685229)';
+  return 'Valid phone number is required (10–15 digits)';
+}
+
 /**
- * Link Firebase user to candidate by email (after registration).
- * POST /api/candidate/link - requires Firebase token in Authorization header.
+ * Check if the current Firebase user has a complete candidate profile.
+ * GET /api/candidate/registration-status - requires Firebase token.
+ * Used to decide whether to show registration form or full app.
+ */
+export const getRegistrationStatus = async (req, res) => {
+  try {
+    const uid = req.firebaseUser?.uid;
+    if (!uid) {
+      return res.json({ success: true, data: { complete: false } });
+    }
+    const candidate = await CandidateModel.findOne({ firebaseUid: uid }).lean();
+    const complete = Boolean(
+      candidate &&
+      candidate.firstName &&
+      candidate.lastName &&
+      candidate.email &&
+      candidate.mobileNo &&
+      /^\S+@\S+\.\S+$/.test(String(candidate.email)) &&
+      (PHONE_DIGITS_REGEX.test(String(candidate.mobileNo)) || /^\+?[0-9]{10,15}$/.test(String(candidate.mobileNo)))
+    );
+    return res.json({ success: true, data: { complete } });
+  } catch (err) {
+    console.error('[getRegistrationStatus] Error:', err.message, err.stack);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Register / complete profile: create or update candidate with firstName, lastName, email, phone.
+ * POST /api/candidate/register - requires Firebase token.
+ * Body: { firstName, lastName, email, phone } (all required).
  *
- * If no candidate exists with this email, creates one (register-first flow).
- * When they apply later, their profile will be updated with real details.
+ * Flow: 1) Find candidate by current uid. If found → update and return.
+ *       2) Find by email. If found and linked to another uid → 409 (email conflict).
+ *       3) Find by phone. If found and linked to another uid → 409 (phone conflict).
+ *       4) If found by email (no conflict) → link uid to that candidate (re-link).
+ *       5) If found by phone (no conflict) → link uid to that candidate (re-link).
+ *       6) Else → create new candidate.
+ * RCA: 409 phone = same phone was used to register before with a different Firebase identity (e.g. phone vs email).
+ */
+export const register = async (req, res) => {
+  try {
+    const uid = req.firebaseUser?.uid;
+    if (!uid) {
+      return res.status(401).json({ success: false, message: 'Not authenticated' });
+    }
+
+    const { firstName, lastName, email, phone } = req.body || {};
+    const f = (String(firstName || '').trim());
+    const l = (String(lastName || '').trim());
+    const e = (String(email || '').trim().toLowerCase());
+    const p = normalizePhoneToDigits(String(phone || ''));
+
+    console.log('[register] Start', { uid, email: e, phoneDigits: p, hasEmail: !!e, hasPhone: !!p });
+
+    if (!f || f.length < 2) {
+      return res.status(400).json({ success: false, message: 'Valid first name is required (min 2 characters)' });
+    }
+    if (!l || l.length < 2) {
+      return res.status(400).json({ success: false, message: 'Valid last name is required (min 2 characters)' });
+    }
+    if (!e || !/^\S+@\S+\.\S+$/.test(e)) {
+      return res.status(400).json({ success: false, message: 'Valid email is required' });
+    }
+    if (!p || !validatePhoneByRegion(p)) {
+      return res.status(400).json({ success: false, message: getPhoneValidationMessage() });
+    }
+
+    let candidate = await CandidateModel.findOne({ firebaseUid: uid });
+    if (candidate) {
+      candidate.firstName = f;
+      candidate.lastName = l;
+      candidate.email = e;
+      candidate.mobileNo = p;
+      await candidate.save();
+      console.log('[register] Updated existing candidate for this uid', { candidateId: candidate._id.toString(), uid });
+      return res.json({ success: true, message: 'Profile updated', data: { candidateId: candidate._id } });
+    }
+
+    // Check phone first: if user added a phone that's already on another profile (e.g. after social login), show phone conflict and merge flow
+    const byPhone = await CandidateModel.findOne({
+      $or: [{ mobileNo: p }, { mobileNo: `+${p}` }],
+    });
+    if (byPhone && byPhone.firebaseUid && byPhone.firebaseUid !== uid) {
+      console.warn('[register] 409 Phone already registered by another account', {
+        phoneDigits: p,
+        currentUid: uid,
+        existingUid: byPhone.firebaseUid,
+        existingCandidateId: byPhone._id?.toString(),
+      });
+      return res.status(409).json({
+        success: false,
+        message: 'This phone number is already registered in another profile. Do you want to merge? If yes, verify using the OTP we send to your phone.',
+        conflictType: 'phone',
+      });
+    }
+
+    const byEmail = await CandidateModel.findOne({ email: e });
+    if (byEmail && byEmail.firebaseUid && byEmail.firebaseUid !== uid) {
+      // User signed in with this email (e.g. Google) — they already proved ownership. Link the existing profile to this account; no email OTP.
+      const currentUserEmail = (req.firebaseUser?.email || '').trim().toLowerCase();
+      if (currentUserEmail === e) {
+        byEmail.firebaseUid = uid;
+        byEmail.firstName = f;
+        byEmail.lastName = l;
+        byEmail.mobileNo = p;
+        await byEmail.save();
+        console.log('[register] Linked existing candidate by email (same-email sign-in, e.g. Google)', {
+          candidateId: byEmail._id.toString(),
+          uid,
+          email: e,
+        });
+        return res.json({ success: true, message: 'Profile linked successfully', data: { candidateId: byEmail._id } });
+      }
+      console.warn('[register] 409 Email already registered by another account', {
+        email: e,
+        currentUid: uid,
+        existingUid: byEmail.firebaseUid,
+        existingCandidateId: byEmail._id?.toString(),
+      });
+      return res.status(409).json({
+        success: false,
+        message: 'This email is already linked to another account. Do you want to merge? If yes, verify using the OTP we send to your email.',
+        conflictType: 'email',
+      });
+    }
+
+    if (byEmail) {
+      byEmail.firebaseUid = uid;
+      byEmail.firstName = f;
+      byEmail.lastName = l;
+      byEmail.mobileNo = p;
+      await byEmail.save();
+      console.log('[register] Linked existing candidate by email', {
+        candidateId: byEmail._id.toString(),
+        uid,
+        email: e,
+      });
+      return res.json({ success: true, message: 'Account linked successfully', data: { candidateId: byEmail._id } });
+    }
+    if (byPhone) {
+      byPhone.firebaseUid = uid;
+      byPhone.firstName = f;
+      byPhone.lastName = l;
+      byPhone.email = e;
+      await byPhone.save();
+      console.log('[register] Linked existing candidate by phone', {
+        candidateId: byPhone._id.toString(),
+        uid,
+        phoneDigits: p,
+      });
+      return res.json({ success: true, message: 'Account linked successfully', data: { candidateId: byPhone._id } });
+    }
+
+    candidate = new CandidateModel({
+      firstName: f,
+      lastName: l,
+      email: e,
+      mobileNo: p,
+      firebaseUid: uid,
+    });
+    await candidate.save();
+    console.log('[register] Created new candidate', {
+      candidateId: candidate._id.toString(),
+      uid,
+      email: e,
+      phoneDigits: p,
+    });
+    return res.status(201).json({ success: true, message: 'Profile created', data: { candidateId: candidate._id } });
+  } catch (err) {
+    if (err.name === 'MongoServerError' && err.code === 11000) {
+      return res.status(409).json({ success: false, message: 'This email or phone is already in use.' });
+    }
+    console.error('[register] Error:', err.message, err.stack);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Verify email OTP and link existing candidate (by email) to current Firebase uid (merge).
+ * POST /api/candidate/verify-email-and-merge - requires Firebase token. Body: { email, code }.
+ * Call send-email-otp first, then this with the code.
+ */
+export const verifyEmailAndMerge = async (req, res) => {
+  try {
+    const uid = req.firebaseUser?.uid;
+    if (!uid) {
+      return res.status(401).json({ success: false, message: 'Not authenticated' });
+    }
+    const { email, code } = req.body || {};
+    const result = verifyAndConsumeEmailOtp(email, code);
+    if (!result.valid) {
+      return res.status(400).json({ success: false, message: result.message });
+    }
+    const normalized = (String(email || '').trim().toLowerCase());
+    const candidate = await CandidateModel.findOne({ email: normalized });
+    if (!candidate) {
+      return res.status(404).json({ success: false, message: 'No profile found for this email.' });
+    }
+    candidate.firebaseUid = uid;
+    await candidate.save();
+    console.log('[verifyEmailAndMerge] Linked candidate to current uid', {
+      candidateId: candidate._id.toString(),
+      uid,
+      email: normalized,
+    });
+    return res.json({ success: true, message: 'Account linked. You can continue.', data: { candidateId: candidate._id } });
+  } catch (err) {
+    console.error('[verifyEmailAndMerge] Error:', err.message, err.stack);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Verify phone OTP and link existing candidate (by phone) to current Firebase uid (merge).
+ * POST /api/candidate/verify-phone-and-merge - requires Firebase token. Body: { phone, code }.
+ * Call send-merge-phone-otp first (requires SMS configured), then this with the code.
+ */
+export const verifyPhoneAndMerge = async (req, res) => {
+  try {
+    const uid = req.firebaseUser?.uid;
+    if (!uid) {
+      return res.status(401).json({ success: false, message: 'Not authenticated' });
+    }
+    const { phone, code } = req.body || {};
+    const p = normalizePhoneToDigits(String(phone || ''));
+    if (!p || !PHONE_DIGITS_REGEX.test(p)) {
+      return res.status(400).json({ success: false, message: 'Valid phone number is required' });
+    }
+    const result = verifyAndConsumePhoneOtp(p, code);
+    if (!result.valid) {
+      return res.status(400).json({ success: false, message: result.message });
+    }
+    const candidate = await CandidateModel.findOne({ $or: [{ mobileNo: p }, { mobileNo: `+${p}` }] });
+    if (!candidate) {
+      return res.status(404).json({ success: false, message: 'No profile found for this phone.' });
+    }
+    candidate.firebaseUid = uid;
+    await candidate.save();
+    console.log('[verifyPhoneAndMerge] Linked candidate to current uid', {
+      candidateId: candidate._id.toString(),
+      uid,
+      phoneDigits: p,
+    });
+    return res.json({ success: true, message: 'Account linked. You can continue.', data: { candidateId: candidate._id } });
+  } catch (err) {
+    console.error('[verifyPhoneAndMerge] Error:', err.message, err.stack);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Link Firebase user to existing candidate by email or phone (no creation).
+ * POST /api/candidate/link - requires Firebase token.
+ * If a candidate already exists for this uid (from register), returns success.
+ * If token has email/phone and a candidate exists with that email/phone, links uid to that candidate.
+ * Otherwise returns success with registered: false so frontend shows registration.
  */
 export const linkAccount = async (req, res) => {
   try {
-    const { uid, email, name } = req.firebaseUser || {};
-    if (!uid || !email) {
-      console.warn('[linkAccount] Invalid token payload: missing uid or email', { hasUid: !!uid, hasEmail: !!email });
+    const { uid, email, phone_number } = req.firebaseUser || {};
+    if (!uid) {
       return res.status(400).json({ success: false, message: 'Invalid token payload' });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
-    let candidate = await CandidateModel.findOne({ email: normalizedEmail });
+    let candidate = await CandidateModel.findOne({ firebaseUid: uid });
+    if (candidate) {
+      return res.json({ success: true, message: 'Account linked', data: { candidateId: candidate._id, registered: true } });
+    }
 
-    if (!candidate) {
-      // Parse name from Google (e.g. "John Doe" -> firstName: John, lastName: Doe)
-      let firstName = 'User';
-      let lastName = 'Candidate';
-      if (name && typeof name === 'string') {
-        const parts = name.trim().split(/\s+/).filter(Boolean);
-        if (parts.length >= 2) {
-          firstName = parts[0];
-          lastName = parts.slice(1).join(' ');
-        } else if (parts.length === 1 && parts[0].length >= 2) {
-          firstName = parts[0];
-        }
-      } else {
-        const namePart = (normalizedEmail.split('@')[0] || 'User').replace(/[^a-z0-9]/gi, '') || 'User';
-        firstName = namePart.length >= 2 ? namePart.charAt(0).toUpperCase() + namePart.slice(1).toLowerCase() : 'User';
+    const normalizedEmail = email ? String(email).trim().toLowerCase() : '';
+    if (normalizedEmail && /^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+      candidate = await CandidateModel.findOne({ email: normalizedEmail });
+      if (candidate) {
+        candidate.firebaseUid = uid;
+        await candidate.save();
+        console.log('[linkAccount] Linked by email:', { email: normalizedEmail, candidateId: candidate._id.toString() });
+        return res.json({ success: true, message: 'Account linked', data: { candidateId: candidate._id, registered: true } });
       }
-      candidate = new CandidateModel({
-        firstName,
-        lastName,
-        email: normalizedEmail,
-        mobileNo: '+0000000000', // Placeholder - user must complete profile
-        firebaseUid: uid,
+    }
+
+    const phoneDigits = normalizePhoneToDigits(phone_number || '');
+    if (phoneDigits && PHONE_DIGITS_REGEX.test(phoneDigits)) {
+      candidate = await CandidateModel.findOne({
+        $or: [{ mobileNo: phoneDigits }, { mobileNo: `+${phoneDigits}` }],
       });
-      await candidate.save();
-      console.log(`[linkAccount] Created new candidate for ${normalizedEmail} (register-first)`);
-      return res.json({ success: true, message: 'Account linked successfully', data: { candidateId: candidate._id } });
+      if (candidate) {
+        candidate.firebaseUid = uid;
+        await candidate.save();
+        console.log('[linkAccount] Linked by phone:', { candidateId: candidate._id.toString() });
+        return res.json({ success: true, message: 'Account linked', data: { candidateId: candidate._id, registered: true } });
+      }
     }
 
-    // Same UID: already linked, no-op success
-    if (candidate.firebaseUid === uid) {
-      console.log('[linkAccount] Already linked:', { email: normalizedEmail, candidateId: candidate._id.toString() });
-      return res.json({ success: true, message: 'Account linked successfully', data: { candidateId: candidate._id } });
-    }
-
-    // Different UID: email was linked to another Firebase user (e.g. old email/password account).
-    // Re-link to current user so Google sign-in can take over; one candidate per email.
-    if (candidate.firebaseUid && candidate.firebaseUid !== uid) {
-      console.log('[linkAccount] Re-linking email to new Firebase user:', {
-        email: normalizedEmail,
-        previousUid: candidate.firebaseUid,
-        newUid: uid,
-        candidateId: candidate._id.toString(),
-      });
-    }
-
-    candidate.firebaseUid = uid;
-    await candidate.save();
-    console.log('[linkAccount] Link updated:', { email: normalizedEmail, candidateId: candidate._id.toString() });
-    return res.json({ success: true, message: 'Account linked successfully', data: { candidateId: candidate._id } });
+    return res.json({ success: true, message: 'Not registered yet', data: { registered: false } });
   } catch (err) {
     console.error('[linkAccount] Error:', err.message, err.stack);
     return res.status(500).json({ success: false, message: 'Server error' });
@@ -162,6 +424,12 @@ export const updateProfile = async (req, res) => {
       if (req.body[key] !== undefined) {
         if (['tenthPercentage', 'twelfthPercentage', 'degreeCgpa'].includes(key)) {
           doc[key] = req.body[key] === '' ? undefined : parseFloat(req.body[key]);
+        } else if (key === 'mobileNo') {
+          const digits = normalizePhoneToDigits(String(req.body[key]));
+          if (!digits || !validatePhoneByRegion(digits)) {
+            return res.status(400).json({ success: false, message: getPhoneValidationMessage() });
+          }
+          doc[key] = digits;
         } else {
           doc[key] = req.body[key];
         }
@@ -200,8 +468,49 @@ export const getResume = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('[getResume]', err);
+    console.error('[getResume]', err?.message, err?.stack);
     return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Get a signed download URL for the candidate's primary resume (Firebase Storage).
+ * GET /api/candidate/resume-download-url
+ * Backend uses Admin SDK so errors (e.g. file not found, bucket permission) are logged here.
+ */
+export const getResumeDownloadUrl = async (req, res) => {
+  let storagePathForLog = null;
+  try {
+    const candidate = req.candidate;
+    if (!candidate) return res.status(403).json({ success: false, message: 'Not authenticated' });
+
+    const doc = await CandidateModel.findById(candidate._id).select('resume').lean();
+    if (!doc?.resume?.storagePath) {
+      return res.status(404).json({ success: false, message: 'No resume uploaded yet' });
+    }
+    storagePathForLog = doc.resume.storagePath;
+
+    const init = initFirebaseAdmin();
+    if (!init.firebaseInitialized) {
+      console.error('[getResumeDownloadUrl] Firebase not initialized');
+      return res.status(503).json({ success: false, message: 'Service unavailable' });
+    }
+
+    const admin = getFirebaseAdmin();
+    const bucketName = process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.appspot.com`;
+    const bucket = admin.storage().bucket(bucketName);
+    const file = bucket.file(doc.resume.storagePath);
+
+    const [url] = await file.getSignedUrl({
+      version: 'v4',
+      action: 'read',
+      expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+    });
+
+    return res.json({ success: true, data: { url } });
+  } catch (err) {
+    console.error('[getResumeDownloadUrl]', err?.code || err?.name, err?.message, 'path=', storagePathForLog, err?.stack);
+    return res.status(500).json({ success: false, message: err?.message || 'Failed to get resume download URL' });
   }
 };
 
@@ -418,3 +727,4 @@ export const updateApplicationResume = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+

@@ -40,7 +40,15 @@ const vacancySchema = new mongoose.Schema({
         type: Boolean,
         default: false // Hidden by default
     },
-    
+
+    // Recruiter = internal admin user only (superadmin/admin/hr). Firebase UID; resolved from Firebase when serving job page.
+    recruiterUid: {
+        type: String,
+        trim: true,
+        default: null,
+        index: true
+    },
+
     // Job Details
     description: {
         type: String,

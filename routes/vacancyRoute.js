@@ -1,5 +1,6 @@
 import express from 'express';
 import {addVacancy , listVacancy, getVacancy, updateVacancy, removeVacancy, bulkRemoveVacancy, bulkUpdateStatus} from '../controllers/vacancyController.js';
+import { contactRecruiter } from '../controllers/contactRecruiterController.js';
 import verifyAdmin from '../middleware/verifyAdmin.js';
 
 const vacancyRouter = express.Router();
@@ -13,6 +14,7 @@ vacancyRouter.use((req, res, next) => {
 vacancyRouter.post("/add" , verifyAdmin , addVacancy)
 vacancyRouter.get("/list", listVacancy); // Public endpoint (frontend needs this), admin panel can also use it
 vacancyRouter.get("/get/:id", getVacancy); // Public endpoint for detailed view
+vacancyRouter.post("/contact-recruiter", contactRecruiter); // Public: candidate sends message to job's recruiter via SendGrid
 vacancyRouter.put("/update", verifyAdmin, updateVacancy); // Admin only, for editing
 vacancyRouter.post("/remove", verifyAdmin , removeVacancy)
 vacancyRouter.post("/bulk-remove", verifyAdmin, bulkRemoveVacancy); // Admin only, bulk delete

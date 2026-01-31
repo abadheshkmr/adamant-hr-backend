@@ -3,11 +3,20 @@ import industryModel from "../models/industryModel.js";
 import ClientModel from "../models/clientModel.js";
 import CompanyModel from "../models/companyModel.js";
 import mongoose from "mongoose";
+import { processInstantAlerts } from "../services/jobAlertService.js";
+import { isInternalUser } from "./adminUsersController.js";
+import { getFirebaseAdmin, initFirebaseAdmin } from "../utils/firebaseAdmin.js";
 
 // Helper function to check if request is from admin
 const isAdminRequest = (req) => {
   const authHeader = req.header("Authorization");
   return !!authHeader && authHeader.startsWith("Bearer ");
+};
+
+// Escape special regex characters for use in $regexMatch
+const escapeRegex = (str) => {
+  if (typeof str !== 'string') return '';
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
 
 // add vacancy
@@ -38,6 +47,15 @@ const addVacancy = async (req , res) => {
             }
         }
 
+        // Recruiter must be an internal admin user (superadmin/admin/hr)
+        let recruiterUid = req.body.recruiterUid == null || req.body.recruiterUid === '' ? null : String(req.body.recruiterUid).trim();
+        if (recruiterUid) {
+            const allowed = await isInternalUser(recruiterUid);
+            if (!allowed) {
+                return res.json({ success: false, message: "Recruiter must be an internal admin user (superadmin/admin/hr)" });
+            }
+        }
+
         // Get the count of existing vacancies to generate jobId
         const lastVacancy = await vacancyModel.findOne().sort({ jobId: -1 }).select("jobId");
         const jobId = lastVacancy ? lastVacancy.jobId + 1 : 1;
@@ -50,6 +68,7 @@ const addVacancy = async (req , res) => {
             client: req.body.client || null,
             company: req.body.company || null,
             showClientToCandidate: req.body.showClientToCandidate === true || req.body.showClientToCandidate === 'true',
+            recruiterUid: recruiterUid || null,
             skills: req.body.skills || [],
             benefits: Array.isArray(req.body.benefits) ? req.body.benefits : [],
             specialNote: req.body.specialNote || '',
@@ -70,12 +89,17 @@ const addVacancy = async (req , res) => {
         });
 
         await vacancy.save();
-        
+
+        // Fire-and-forget: send instant job alerts to matching subscribers
+        processInstantAlerts(vacancy).catch((err) =>
+          console.error('[addVacancy] job alert error:', err?.message)
+        );
+
         // Populate client for admin response
         if (vacancy.client) {
             await vacancy.populate('client', 'name');
         }
-        
+
         res.json({success: true, message: "Vacancy Added", data: vacancy});
     } catch(error) {
         console.log(error);
@@ -114,12 +138,25 @@ const listVacancy = async (req,res) => {
             filter.industry = req.query.industry;
         }
 
-        // Location filters
-        if (req.query.city) {
-            filter['location.city'] = new RegExp(req.query.city, 'i');
+        // Location filter: match city or state (so "Delhi" finds Delhi city or Delhi state)
+        if (req.query.city && req.query.city.trim()) {
+            const cityEscaped = escapeRegex(req.query.city.trim());
+            const cityRegex = { $regex: cityEscaped, $options: 'i' };
+            const cityOr = [
+                { 'location.city': cityRegex },
+                { 'location.state': cityRegex }
+            ];
+            if (filter.$or) {
+                filter.$and = [ { $or: filter.$or }, { $or: cityOr } ];
+                delete filter.$or;
+            } else if (filter.$and) {
+                filter.$and.push({ $or: cityOr });
+            } else {
+                filter.$and = [ { $or: cityOr } ];
+            }
         }
-        if (req.query.state) {
-            filter['location.state'] = new RegExp(req.query.state, 'i');
+        if (req.query.state && req.query.state.trim()) {
+            filter['location.state'] = { $regex: escapeRegex(req.query.state.trim()), $options: 'i' };
         }
         if (req.query.isRemote !== undefined) {
             filter['location.isRemote'] = req.query.isRemote === 'true';
@@ -141,15 +178,18 @@ const listVacancy = async (req,res) => {
             filter.client = req.query.client;
         }
 
-        // Search in job title and description
-        // If we have both status $or and search, combine them with $and
-        if (req.query.search) {
-            const searchRegex = new RegExp(req.query.search, 'i');
+        // Search in job title, description, skills, and location (city/state)
+        if (req.query.search && req.query.search.trim()) {
+            const searchEscaped = escapeRegex(req.query.search.trim());
+            const searchRegex = { $regex: searchEscaped, $options: 'i' };
             const searchOr = [
                 { jobTitle: searchRegex },
-                { description: searchRegex }
+                { description: searchRegex },
+                { skills: searchRegex },
+                { 'location.city': searchRegex },
+                { 'location.state': searchRegex }
             ];
-            
+
             // If we have status $or, combine with $and
             if (filter.$or) {
                 filter.$and = [
@@ -167,18 +207,59 @@ const listVacancy = async (req,res) => {
         // Get total count with filters
         const total = await vacancyModel.countDocuments(filter);
         console.log(`[${new Date().toISOString()}] Total vacancies found: ${total}`);
-        
-        // Fetch with pagination, filters, and populate industry, company, and client (with company)
-        let vacancies = await vacancyModel
-            .find(filter)
-            .populate('industry', 'name image')
-            .populate('company', 'name description founded employees logo website benefits culture image')
-            .populate({ path: 'client', select: 'name companyId', populate: { path: 'companyId', select: 'name description founded employees logo website benefits culture image' } })
-            .select('jobTitle description qualification jobId createdAt industry location employmentType experienceLevel salary applicationDeadline numberOfOpenings skills benefits specialNote client company showClientToCandidate')
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .lean();
+
+        let vacancies;
+
+        if (req.query.search && req.query.search.trim()) {
+            // Relevance ranking: title (3) > skills (2) > description (1), then by date
+            const searchEscaped = escapeRegex(req.query.search.trim());
+            const searchRegex = new RegExp(searchEscaped, 'i');
+            const pipeline = [
+                { $match: filter },
+                {
+                    $addFields: {
+                        relevanceScore: {
+                            $add: [
+                                { $cond: [{ $regexMatch: { input: { $ifNull: ['$jobTitle', ''] }, regex: searchRegex.source, options: 'i' } }, 3, 0] },
+                                { $cond: [{ $gt: [{ $size: { $filter: { input: { $ifNull: ['$skills', []] }, as: 's', cond: { $regexMatch: { input: '$$s', regex: searchRegex.source, options: 'i' } } } } }, 0] }, 2, 0] },
+                                { $cond: [{ $regexMatch: { input: { $ifNull: ['$description', ''] }, regex: searchRegex.source, options: 'i' } }, 1, 0] }
+                            ]
+                        }
+                    }
+                },
+                { $sort: { relevanceScore: -1, createdAt: -1 } },
+                { $skip: skip },
+                { $limit: limit },
+                { $project: { _id: 1 } }
+            ];
+            const ranked = await vacancyModel.aggregate(pipeline);
+            const ids = ranked.map((d) => d._id);
+            if (ids.length === 0) {
+                vacancies = [];
+            } else {
+                const found = await vacancyModel
+                    .find({ _id: { $in: ids } })
+                    .populate('industry', 'name image')
+                    .populate('company', 'name description founded employees logo website benefits culture image')
+                    .populate({ path: 'client', select: 'name companyId', populate: { path: 'companyId', select: 'name description founded employees logo website benefits culture image' } })
+                    .select('jobTitle description qualification jobId createdAt industry location employmentType experienceLevel salary applicationDeadline numberOfOpenings skills benefits specialNote client company showClientToCandidate')
+                    .lean();
+                const byId = new Map(found.map((v) => [v._id.toString(), v]));
+                vacancies = ids.map((id) => byId.get(id.toString())).filter(Boolean);
+            }
+        } else {
+            // No search: sort by date only
+            vacancies = await vacancyModel
+                .find(filter)
+                .populate('industry', 'name image')
+                .populate('company', 'name description founded employees logo website benefits culture image')
+                .populate({ path: 'client', select: 'name companyId', populate: { path: 'companyId', select: 'name description founded employees logo website benefits culture image' } })
+                .select('jobTitle description qualification jobId createdAt industry location employmentType experienceLevel salary applicationDeadline numberOfOpenings skills benefits specialNote client company showClientToCandidate')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean();
+        }
 
         // Resolve company: vacancy.company ?? client.companyId (so job can have independent company or inherit from client)
         vacancies = vacancies.map((v) => {
@@ -256,6 +337,28 @@ const getVacancy = async (req, res) => {
 
         // Resolve company: vacancy.company ?? client.companyId (independent company or client-as-company)
         vacancy.company = vacancy.company || (vacancy.client && vacancy.client.companyId) || null;
+
+        // Resolve recruiter from Firebase (only internal admin users can be recruiters)
+        if (vacancy.recruiterUid) {
+            try {
+                const init = initFirebaseAdmin();
+                if (init.firebaseInitialized) {
+                    const admin = getFirebaseAdmin();
+                    const user = await admin.auth().getUser(vacancy.recruiterUid);
+                    vacancy.recruiter = {
+                        _id: user.uid,
+                        name: user.displayName || user.email || 'Recruiter',
+                        email: user.email || undefined,
+                        photo: user.photoURL || undefined,
+                    };
+                }
+            } catch {
+                vacancy.recruiter = null;
+            }
+        } else {
+            vacancy.recruiter = null;
+        }
+        delete vacancy.recruiterUid;
 
         // Remove client info from public responses unless showClientToCandidate is true
         if (!isAdmin) {
@@ -354,6 +457,18 @@ const updateVacancy = async (req, res) => {
                 }
                 updateData.company = req.body.company;
             }
+        }
+
+        // Recruiter (must be internal admin user) - only update if provided
+        if (req.body.recruiterUid !== undefined) {
+            const recruiterUid = req.body.recruiterUid == null || req.body.recruiterUid === '' ? null : String(req.body.recruiterUid).trim();
+            if (recruiterUid) {
+                const allowed = await isInternalUser(recruiterUid);
+                if (!allowed) {
+                    return res.json({ success: false, message: "Recruiter must be an internal admin user (superadmin/admin/hr)" });
+                }
+            }
+            updateData.recruiterUid = recruiterUid;
         }
 
         // Skills - only update if provided
