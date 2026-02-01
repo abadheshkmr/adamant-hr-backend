@@ -14,6 +14,8 @@ import {
   getDocuments,
   addDocument,
   deleteDocument,
+  verifyDocument,
+  getDocumentDownloadUrl,
   getApplicationResume,
   updateApplicationResume,
 } from '../controllers/candidateController.js';
@@ -54,6 +56,8 @@ candidateRouter.get('/resume-download-url', verifyFirebaseCandidate, getResumeDo
 candidateRouter.post('/resume', verifyFirebaseCandidate, updateResume);
 candidateRouter.get('/documents', verifyFirebaseCandidate, getDocuments);
 candidateRouter.post('/documents', verifyFirebaseCandidate, addDocument);
+candidateRouter.get('/documents/:id/download-url', verifyFirebaseCandidate, getDocumentDownloadUrl);
+candidateRouter.post('/documents/:id/verify', verifyFirebaseCandidate, verifyDocument);
 candidateRouter.delete('/documents/:id', verifyFirebaseCandidate, deleteDocument);
 candidateRouter.get('/application/:applicationId/resume', verifyFirebaseCandidate, getApplicationResume);
 candidateRouter.post('/application/:applicationId/resume', verifyFirebaseCandidate, uploadResume.single('resume'), updateApplicationResume);

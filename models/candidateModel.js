@@ -85,12 +85,21 @@ const candidateSchema = new mongoose.Schema({
     fileName: { type: String, trim: true },
     uploadedAt: { type: Date },
   },
-  // Documents (PAN, AADHAR, marksheets) - stored in Firebase Storage
+  // Supporting documents - stored in Firebase Storage. Multiple allowed per type (e.g. multiple ID proofs).
+  // ID proofs (PAN, Aadhar, DL) have front and back sides - use documentSide for each.
   documents: [{
-    docType: { type: String, trim: true, required: true }, // 'PAN', 'AADHAR', 'marksheet'
+    category: { type: String, trim: true }, // ID_PROOF, EDUCATION, PHOTO, OTHER
+    label: { type: String, trim: true }, // e.g. "PAN Card", "B.Tech Degree", "Passport Photo"
+    documentSide: { type: String, trim: true, enum: ['front', 'back'] }, // for ID_PROOF: front or back
+    idNumber: { type: String, trim: true }, // ID number on the document (e.g. PAN, Aadhar number) - for ID_PROOF
+    docType: { type: String, trim: true }, // legacy: PAN, AADHAR, marksheet, other
     storagePath: { type: String, trim: true, required: true },
     fileName: { type: String, trim: true, required: true },
     uploadedAt: { type: Date, default: Date.now },
+    verificationStatus: { type: String, enum: ['pending', 'verified', 'failed'], default: 'pending' },
+    verifiedAt: { type: Date },
+    verifiedBy: { type: String, trim: true }, // admin uid or email (manual verification)
+    notes: { type: String, trim: true }, // optional notes from admin
   }],
 }, {
   timestamps: true

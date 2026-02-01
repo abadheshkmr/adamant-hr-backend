@@ -18,11 +18,11 @@ export const apiLimiter = rateLimit({
   skipSuccessfulRequests: false,
   // Skip rate limiting for failed requests (optional)
   skipFailedRequests: false,
-  // Skip rate limiting for public read-only endpoints
+  // Skip rate limiting for public read-only endpoints and CORS preflight
   skip: (req) => {
-    // Allow more requests for public read-only endpoints
+    if (req.method === 'OPTIONS') return true; // CORS preflight must not be rate-limited
     const path = req.path || req.originalUrl || '';
-    return path.includes('/api/industry/list') || 
+    return path.includes('/api/industry/list') ||
            path.includes('/api/service/list') ||
            path.includes('/api/vacancy/list');
   }

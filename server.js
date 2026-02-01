@@ -43,15 +43,11 @@ app.use(helmet({
 // Trust proxy (important for rate limiting behind reverse proxy)
 app.set('trust proxy', 1);
 
-// DDoS Protection Middleware (apply before other middleware)
-app.use(suspiciousActivityTracker);
-app.use(speedLimiter);
-app.use(apiLimiter);
+// Standard middleware (body parsing first so CORS can run before limiters)
+app.use(express.json({ limit: '10mb' })); // Limit JSON payload size
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Standard middleware
-app.use(express.json({ limit: '10mb' })) // Limit JSON payload size
-
-// CORS configuration - allow frontend, admin panel, and candidate portal
+// CORS must run before rate limiters so preflight OPTIONS and any error responses (e.g. 429) include CORS headers
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3000',
   process.env.ADMIN_URL || 'http://localhost:3001',
@@ -62,22 +58,26 @@ const allowedOrigins = [
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
   'http://127.0.0.1:5173',
-].filter(Boolean); // Remove any undefined values
+].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
-    // In development, allow localhost and 127.0.0.1 on any port
     if (process.env.NODE_ENV === 'development') return callback(null, true);
     if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
-  optionsSuccessStatus: 200
-}))
-app.use(express.urlencoded({ extended: true, limit: '10mb' })); // Limit URL-encoded payload size
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200,
+}));
+
+// DDoS Protection Middleware (after CORS so responses still get CORS headers)
+app.use(suspiciousActivityTracker);
+app.use(speedLimiter);
+app.use(apiLimiter);
 
 // db connection
 

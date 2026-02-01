@@ -362,7 +362,7 @@ export const getMe = async (req, res) => {
 
     const jobIds = [...new Set(applications.map((a) => a.jobId))];
     const vacancies = await VacancyModel.find({ jobId: { $in: jobIds } })
-      .select('jobId jobTitle industry location employmentType')
+      .select('jobId jobTitle industry location employmentType status')
       .populate('industry', 'name')
       .lean();
 
@@ -388,7 +388,7 @@ export const getMe = async (req, res) => {
       degree: candidate.degree,
       degreeCgpa: candidate.degreeCgpa,
       resume: candidate.resume,
-      documents: candidate.documents || [],
+      documents: (candidate.documents || []).map(docToResponse),
     };
 
     return res.json({
@@ -543,8 +543,36 @@ export const updateResume = async (req, res) => {
   }
 };
 
+const DOC_CATEGORIES = ['ID_PROOF', 'EDUCATION', 'PHOTO', 'OTHER'];
+const LEGACY_DOC_TYPES = ['PAN', 'AADHAR', 'MARKSHEET', 'OTHER'];
+
+function docToResponse(d) {
+  let category = d.category;
+  if (!category && d.docType) {
+    const t = String(d.docType).toUpperCase();
+    category = ['PAN', 'AADHAR'].includes(t) ? 'ID_PROOF' : t === 'OTHER' ? 'OTHER' : 'EDUCATION';
+  }
+  if (!category) category = 'OTHER';
+  const label = d.label || d.docType || category;
+  return {
+    _id: d._id,
+    category: category,
+    label: label,
+    documentSide: d.documentSide || null,
+    idNumber: d.idNumber || null,
+    docType: d.docType,
+    fileName: d.fileName,
+    storagePath: d.storagePath,
+    uploadedAt: d.uploadedAt,
+    verificationStatus: d.verificationStatus || 'pending',
+    verifiedAt: d.verifiedAt,
+    verifiedBy: d.verifiedBy || null,
+    notes: d.notes || null,
+  };
+}
+
 /**
- * List documents (PAN, AADHAR, marksheets).
+ * List documents (ID proofs, education, photos, etc.). Multiple allowed per type.
  * GET /api/candidate/documents
  */
 export const getDocuments = async (req, res) => {
@@ -553,13 +581,7 @@ export const getDocuments = async (req, res) => {
     if (!candidate) return res.status(403).json({ success: false, message: 'Not authenticated' });
 
     const doc = await CandidateModel.findById(candidate._id).select('documents').lean();
-    const documents = (doc?.documents || []).map((d) => ({
-      _id: d._id,
-      docType: d.docType,
-      fileName: d.fileName,
-      storagePath: d.storagePath,
-      uploadedAt: d.uploadedAt,
-    }));
+    const documents = (doc?.documents || []).map(docToResponse);
 
     return res.json({ success: true, data: documents });
   } catch (err) {
@@ -570,40 +592,141 @@ export const getDocuments = async (req, res) => {
 
 /**
  * Add document (after frontend uploads to Firebase Storage).
- * POST /api/candidate/documents - body: { docType, storagePath, fileName }
+ * POST /api/candidate/documents - body: { category, label, storagePath, fileName }
+ * Legacy: { docType, storagePath, fileName } also supported.
  */
 export const addDocument = async (req, res) => {
   try {
     const candidate = req.candidate;
     if (!candidate) return res.status(403).json({ success: false, message: 'Not authenticated' });
 
-    const { docType, storagePath, fileName } = req.body;
-    if (!docType || !storagePath || !fileName) {
-      return res.status(400).json({ success: false, message: 'docType, storagePath and fileName required' });
+    const { category, label, documentSide, idNumber, docType, storagePath, fileName } = req.body;
+    if (!storagePath || !fileName) {
+      return res.status(400).json({ success: false, message: 'storagePath and fileName required' });
     }
 
-    const allowedTypes = ['PAN', 'AADHAR', 'marksheet', 'other'];
-    if (!allowedTypes.includes(String(docType).toUpperCase())) {
-      return res.status(400).json({ success: false, message: 'docType must be PAN, AADHAR, marksheet, or other' });
+    let finalCategory = (category && DOC_CATEGORIES.includes(String(category).toUpperCase())) ? String(category).toUpperCase() : null;
+    let finalLabel = label ? String(label).trim() : null;
+    let finalDocType = docType ? String(docType).toUpperCase() : null;
+
+    // Legacy: docType only
+    if (!finalCategory && finalDocType && LEGACY_DOC_TYPES.includes(finalDocType)) {
+      finalCategory = ['PAN', 'AADHAR'].includes(finalDocType) ? 'ID_PROOF' : 'EDUCATION';
+      if (!finalLabel) finalLabel = finalDocType;
+    }
+
+    if (!finalCategory) {
+      return res.status(400).json({ success: false, message: 'category required (ID_PROOF, EDUCATION, PHOTO, OTHER). Legacy: docType (PAN, AADHAR, marksheet, other)' });
+    }
+    if (!finalLabel) {
+      return res.status(400).json({ success: false, message: 'label required (e.g. PAN Card, B.Tech Degree)' });
+    }
+
+    let finalDocumentSide = null;
+    if (documentSide && ['front', 'back'].includes(String(documentSide).toLowerCase())) {
+      finalDocumentSide = String(documentSide).toLowerCase();
+    }
+    if (finalCategory === 'ID_PROOF' && !finalDocumentSide) {
+      return res.status(400).json({ success: false, message: 'documentSide required for ID proofs (PAN, Aadhar, DL): use front or back' });
     }
 
     const doc = await CandidateModel.findById(candidate._id);
     if (!doc) return res.status(404).json({ success: false, message: 'Candidate not found' });
 
     doc.documents = doc.documents || [];
+    const finalIdNumber = (idNumber != null && String(idNumber).trim()) ? String(idNumber).trim() : undefined;
     doc.documents.push({
-      docType: String(docType).toUpperCase(),
+      category: finalCategory,
+      label: finalLabel,
+      documentSide: finalDocumentSide,
+      ...(finalIdNumber && { idNumber: finalIdNumber }),
+      docType: finalDocType,
       storagePath: String(storagePath).trim(),
       fileName: String(fileName).trim(),
       uploadedAt: new Date(),
+      verificationStatus: 'pending',
     });
     await doc.save();
 
     const added = doc.documents[doc.documents.length - 1];
-    return res.json({ success: true, data: { _id: added._id, docType: added.docType, fileName: added.fileName, uploadedAt: added.uploadedAt } });
+    return res.json({ success: true, data: docToResponse(added) });
   } catch (err) {
     console.error('[addDocument]', err);
     return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Verify document (mock API - simulates verification).
+ * POST /api/candidate/documents/:id/verify
+ */
+export const verifyDocument = async (req, res) => {
+  try {
+    const candidate = req.candidate;
+    if (!candidate) return res.status(403).json({ success: false, message: 'Not authenticated' });
+
+    const docId = req.params.id;
+    const doc = await CandidateModel.findById(candidate._id);
+    if (!doc) return res.status(404).json({ success: false, message: 'Candidate not found' });
+
+    doc.documents = doc.documents || [];
+    const idx = doc.documents.findIndex((d) => String(d._id) === docId);
+    if (idx === -1) {
+      return res.status(404).json({ success: false, message: 'Document not found' });
+    }
+
+    // Mock: simulate verification delay, then mark as verified
+    await new Promise((r) => setTimeout(r, 800));
+    doc.documents[idx].verificationStatus = 'verified';
+    doc.documents[idx].verifiedAt = new Date();
+    await doc.save();
+
+    return res.json({ success: true, data: docToResponse(doc.documents[idx]), message: 'Document verified successfully' });
+  } catch (err) {
+    console.error('[verifyDocument]', err);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Get signed download URL for a supporting document.
+ * GET /api/candidate/documents/:id/download-url
+ */
+export const getDocumentDownloadUrl = async (req, res) => {
+  let storagePathForLog = null;
+  try {
+    const candidate = req.candidate;
+    if (!candidate) return res.status(403).json({ success: false, message: 'Not authenticated' });
+
+    const docId = req.params.id;
+    const doc = await CandidateModel.findById(candidate._id).select('documents').lean();
+    const document = (doc?.documents || []).find((d) => String(d._id) === docId);
+    if (!document?.storagePath) {
+      return res.status(404).json({ success: false, message: 'Document not found' });
+    }
+    storagePathForLog = document.storagePath;
+
+    const init = initFirebaseAdmin();
+    if (!init.firebaseInitialized) {
+      console.error('[getDocumentDownloadUrl] Firebase not initialized');
+      return res.status(503).json({ success: false, message: 'Service unavailable' });
+    }
+
+    const admin = getFirebaseAdmin();
+    const bucketName = process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.appspot.com`;
+    const bucket = admin.storage().bucket(bucketName);
+    const file = bucket.file(document.storagePath);
+
+    const [url] = await file.getSignedUrl({
+      version: 'v4',
+      action: 'read',
+      expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+    });
+
+    return res.json({ success: true, data: { url } });
+  } catch (err) {
+    console.error('[getDocumentDownloadUrl]', err?.code || err?.name, err?.message, 'path=', storagePathForLog, err?.stack);
+    return res.status(500).json({ success: false, message: err?.message || 'Failed to get document download URL' });
   }
 };
 
