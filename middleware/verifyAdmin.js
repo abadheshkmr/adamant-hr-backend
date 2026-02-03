@@ -1,4 +1,3 @@
-
 import { verifyFirebaseToken } from './verifyFirebaseUser.js';
 
 function parseListEnv(name) {
@@ -16,8 +15,8 @@ function emailDomain(email) {
 
 export function requireAdminRole(allowedRoles = ['hr', 'admin', 'superadmin']) {
   return async (req, res, next) => {
-    await verifyFirebaseToken(req, res, async () => {
-      try {
+    try {
+      await verifyFirebaseToken(req, res, async () => {
         const email = req.firebaseUser?.email;
         const role = req.firebaseUser?.role || null;
         const token = req.firebaseToken || {};
@@ -35,7 +34,6 @@ export function requireAdminRole(allowedRoles = ['hr', 'admin', 'superadmin']) {
           return res.status(403).json({ success: false, message: 'Forbidden. Email domain not allowed.' });
         }
 
-        // Bootstrap: allow listed superadmin emails even if role claim missing
         const superAdmins = parseListEnv('INTERNAL_SUPERADMINS');
         const effectiveRole = role || (superAdmins.includes(email.toLowerCase()) ? 'superadmin' : null);
 
@@ -49,11 +47,11 @@ export function requireAdminRole(allowedRoles = ['hr', 'admin', 'superadmin']) {
           role: effectiveRole,
         };
         return next();
-      } catch (err) {
-        console.error('[verifyAdmin] Error:', err?.message, err?.stack);
-        return res.status(401).json({ success: false, message: 'Access denied. Authentication failed.' });
-      }
-    });
+      });
+    } catch (err) {
+      console.error('[verifyAdmin] Error:', err?.message, err?.stack);
+      return res.status(401).json({ success: false, message: 'Access denied. Authentication failed.' });
+    }
   };
 }
 

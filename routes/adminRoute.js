@@ -8,10 +8,10 @@ import { getPendingCount, listPending, getDocumentDownloadUrl, setVerification }
 
 const adminRouter = express.Router();
 
-// Apply strict rate limiting to admin login
+// Admin login is via Firebase only; this endpoint returns a helpful message
 adminRouter.post('/login', authLimiter, loginAdmin);
 
-// New admin auth verification (Firebase token + internal domain + role)
+// Admin auth verification: Firebase token + internal domain + role
 adminRouter.post('/auth/verify', verifyFirebaseToken, verifyAdminAuth);
 
 // User management (superadmin only)

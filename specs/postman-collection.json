@@ -1,10 +1,10 @@
 {
 	"info": {
-		"name": "Adamant HR - Admin APIs",
-		"description": "Complete API collection for Adamant HR Admin Panel. Includes enhanced vacancy management with industry integration, advanced filtering, pagination, and bulk operations.",
+		"name": "Adamant HR - Full API Collection",
+		"description": "Admin auth is via Firebase only. Run 'Get Firebase ID Token (Admin)' first: sign in with your admin email/password via Firebase Auth REST API. The idToken is saved to admin_token. Use it for all admin-protected requests. Set firebase_api_key (from Firebase Console → Project Settings → General → Web API Key), admin_email, and admin_password in collection variables.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_postman_id": "adamant-hr-admin-apis",
-		"version": "2.0.0"
+		"version": "3.1.0"
 	},
 	"variable": [
 		{
@@ -16,6 +16,21 @@
 			"key": "admin_token",
 			"value": "",
 			"type": "string"
+		},
+		{
+			"key": "firebase_api_key",
+			"value": "YOUR_FIREBASE_WEB_API_KEY",
+			"type": "string"
+		},
+		{
+			"key": "admin_email",
+			"value": "admin@yourdomain.com",
+			"type": "string"
+		},
+		{
+			"key": "admin_password",
+			"value": "your_password",
+			"type": "string"
 		}
 	],
 	"item": [
@@ -23,7 +38,24 @@
 			"name": "Authentication",
 			"item": [
 				{
-					"name": "Admin Login",
+					"name": "Get Firebase ID Token (Admin)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const json = pm.response.json();",
+									"if (json.idToken) {",
+									"    pm.collectionVariables.set('admin_token', json.idToken);",
+									"    console.log('admin_token saved');",
+									"} else {",
+									"    console.log('No idToken in response:', json);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
 					"request": {
 						"method": "POST",
 						"header": [
@@ -34,7 +66,35 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"username\": \"your_admin_username\",\n  \"password\": \"your_admin_password\"\n}",
+							"raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\",\n  \"returnSecureToken\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={{firebase_api_key}}",
+						"description": "Sign in via Firebase Auth REST API. Uses admin_email and admin_password. Saves idToken to admin_token for use in admin-protected requests. Get firebase_api_key from Firebase Console → Project Settings → General → Web API Key."
+					},
+					"response": []
+				},
+				{
+					"name": "Verify Admin Auth (Backend)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -42,11 +102,11 @@
 							}
 						},
 						"url": {
-							"raw": "{{base_url}}/api/admin/login",
+							"raw": "{{base_url}}/api/admin/auth/verify",
 							"host": ["{{base_url}}"],
-							"path": ["api", "admin", "login"]
+							"path": ["api", "admin", "auth", "verify"]
 						},
-						"description": "Login as admin. Returns JWT token. Save the token to 'admin_token' variable."
+						"description": "Verify the Firebase ID token with the backend. Run after 'Get Firebase ID Token (Admin)'. Returns uid, email, role if token is valid and user has admin access (allowed domain + role)."
 					},
 					"response": []
 				}
@@ -70,12 +130,12 @@
 							"formdata": [
 								{
 									"key": "title",
-									"value": "Service Title",
+									"value": "Executive Search",
 									"type": "text"
 								},
 								{
 									"key": "description",
-									"value": "Service description",
+									"value": "Finding leadership for tomorrow's market leaders through discreet global searches.",
 									"type": "text"
 								},
 								{
@@ -225,17 +285,17 @@
 							"formdata": [
 								{
 									"key": "name",
-									"value": "Industry Name",
+									"value": "Technology",
 									"type": "text"
 								},
 								{
 									"key": "description",
-									"value": "Industry description",
+									"value": "Recruitment expertise for tech and product roles across startups and enterprises.",
 									"type": "text"
 								},
 								{
 									"key": "list",
-									"value": "[\"Item 1\", \"Item 2\", \"Item 3\"]",
+									"value": "[\"Software Engineering\", \"Product Management\", \"Data Science\", \"DevOps\"]",
 									"type": "text",
 									"description": "JSON array as string"
 								},
@@ -393,7 +453,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"jobTitle\": \"Software Engineer\",\n  \"description\": \"We are looking for an experienced software engineer to join our team.\",\n  \"qualification\": \"Bachelor's degree in Computer Science. 2+ years of experience.\",\n  \"industry\": \"INDUSTRY_ID_HERE\",\n  \"skills\": [\"JavaScript\", \"React\", \"Node.js\"],\n  \"city\": \"Noida\",\n  \"state\": \"Uttar Pradesh\",\n  \"country\": \"India\",\n  \"isRemote\": false,\n  \"employmentType\": \"Full-time\",\n  \"experienceLevel\": \"2-5 years\",\n  \"salary\": {\n    \"min\": 50000,\n    \"max\": 80000,\n    \"currency\": \"INR\",\n    \"isNegotiable\": true\n  },\n  \"applicationDeadline\": \"2024-12-31T23:59:59.000Z\",\n  \"numberOfOpenings\": 2,\n  \"status\": \"active\"\n}",
+							"raw": "{\n  \"jobTitle\": \"Software Engineer\",\n  \"description\": \"We are looking for an experienced software engineer to join our team. You will build scalable web applications and collaborate with product and design.\",\n  \"qualification\": \"Bachelor's degree in Computer Science or equivalent. 2+ years of experience.\",\n  \"industry\": \"\",\n  \"client\": \"\",\n  \"company\": \"\",\n  \"showClientToCandidate\": true,\n  \"recruiterUid\": \"\",\n  \"skills\": [\"JavaScript\", \"React\", \"Node.js\", \"TypeScript\"],\n  \"benefits\": [\"Health insurance\", \"WFH\", \"Learning budget\"],\n  \"specialNote\": \"Visa sponsorship not available.\",\n  \"city\": \"Noida\",\n  \"state\": \"Uttar Pradesh\",\n  \"country\": \"India\",\n  \"isRemote\": false,\n  \"employmentType\": \"Full-time\",\n  \"experienceLevel\": \"2-5 years\",\n  \"salary\": {\n    \"min\": 500000,\n    \"max\": 800000,\n    \"currency\": \"INR\",\n    \"isNegotiable\": true\n  },\n  \"applicationDeadline\": \"2025-12-31T23:59:59.000Z\",\n  \"numberOfOpenings\": 2,\n  \"status\": \"active\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -628,6 +688,187 @@
 							"path": ["api", "vacancy", "bulk-update-status"]
 						},
 						"description": "Update status of multiple vacancies at once. Requires admin authentication. Status must be 'active', 'closed', or 'draft'. If setting to 'active', publishedAt is automatically set. Returns count of updated items."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Clients",
+			"item": [
+				{
+					"name": "Add Client",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{admin_token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Acme Corp\",\n  \"description\": \"Leading technology company.\",\n  \"contactPerson\": \"John Smith\",\n  \"email\": \"contact@acme.com\",\n  \"phone\": \"+91 9876543210\",\n  \"address\": \"123 Business Park, Noida\",\n  \"website\": \"https://acme.com\",\n  \"isActive\": true,\n  \"companyId\": \"\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": { "raw": "{{base_url}}/api/client/add", "host": ["{{base_url}}"], "path": ["api", "client", "add"] },
+						"description": "Create a client. companyId is optional (link to company record)."
+					},
+					"response": []
+				},
+				{
+					"name": "List Clients",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+						"url": { "raw": "{{base_url}}/api/client/list", "host": ["{{base_url}}"], "path": ["api", "client", "list"] },
+						"description": "Get all clients. Admin only."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Client by ID",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+						"url": {
+							"raw": "{{base_url}}/api/client/get/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "client", "get", ":id"],
+							"variable": [{ "key": "id", "value": "CLIENT_ID_HERE" }]
+						},
+						"description": "Get single client with vacancy count."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Client",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{admin_token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"CLIENT_ID_HERE\",\n  \"name\": \"Acme Corp Updated\",\n  \"description\": \"Updated description.\",\n  \"contactPerson\": \"Jane Doe\",\n  \"email\": \"contact@acme.com\",\n  \"phone\": \"+91 9876543210\",\n  \"address\": \"456 New Park\",\n  \"website\": \"https://acme.com\",\n  \"isActive\": true,\n  \"companyId\": \"\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": { "raw": "{{base_url}}/api/client/update", "host": ["{{base_url}}"], "path": ["api", "client", "update"] },
+						"description": "Update client. Include id and fields to update."
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Client",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{admin_token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"CLIENT_ID_HERE\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": { "raw": "{{base_url}}/api/client/remove", "host": ["{{base_url}}"], "path": ["api", "client", "remove"] },
+						"description": "Delete a client."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Companies",
+			"item": [
+				{
+					"name": "Add Company",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{admin_token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Acme Technologies\",\n  \"description\": \"We build products that matter.\",\n  \"founded\": \"2010\",\n  \"employees\": \"500-1000\",\n  \"logo\": \"\",\n  \"website\": \"https://acme.com\",\n  \"benefits\": [\"Health insurance\", \"Remote work\", \"Learning budget\"],\n  \"culture\": \"Inclusive and high-performance.\",\n  \"image\": \"\",\n  \"isActive\": true\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": { "raw": "{{base_url}}/api/company/add", "host": ["{{base_url}}"], "path": ["api", "company", "add"] },
+						"description": "Create a company (for job detail / candidate portal). benefits is array of strings."
+					},
+					"response": []
+				},
+				{
+					"name": "List Companies",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+						"url": {
+							"raw": "{{base_url}}/api/company/list",
+							"host": ["{{base_url}}"],
+							"path": ["api", "company", "list"],
+							"query": [
+								{ "key": "isActive", "value": "true", "disabled": true },
+								{ "key": "search", "value": "acme", "disabled": true }
+							]
+						},
+						"description": "Get all companies. Optional: isActive, search."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Company by ID",
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }],
+						"url": {
+							"raw": "{{base_url}}/api/company/get/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "company", "get", ":id"],
+							"variable": [{ "key": "id", "value": "COMPANY_ID_HERE" }]
+						},
+						"description": "Get single company."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Company",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{admin_token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Acme Technologies Updated\",\n  \"description\": \"Updated description.\",\n  \"founded\": \"2010\",\n  \"employees\": \"1000+\",\n  \"website\": \"https://acme.com\",\n  \"benefits\": [\"Health\", \"Remote\", \"Learning\"],\n  \"culture\": \"Updated culture.\",\n  \"isActive\": true\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": {
+							"raw": "{{base_url}}/api/company/update/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "company", "update", ":id"],
+							"variable": [{ "key": "id", "value": "COMPANY_ID_HERE" }]
+						},
+						"description": "Update company. ID in path. Send only fields to update."
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Company",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{admin_token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"COMPANY_ID_HERE\"\n}",
+							"options": { "raw": { "language": "json" } }
+						},
+						"url": { "raw": "{{base_url}}/api/company/remove", "host": ["{{base_url}}"], "path": ["api", "company", "remove"] },
+						"description": "Delete a company."
 					},
 					"response": []
 				}

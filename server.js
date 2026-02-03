@@ -4,7 +4,13 @@ import { dirname, join } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-dotenv.config({ path: join(__dirname, '.env') });
+const envPath = join(__dirname, '.env');
+const loaded = dotenv.config({ path: envPath });
+if (loaded.error) {
+  console.warn('[dotenv] Could not load .env from', envPath, loaded.error.message);
+} else {
+  console.log('[dotenv] Loaded .env from', envPath);
+}
 
 import express from "express"
 import cors from "cors"
@@ -47,11 +53,13 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '10mb' })); // Limit JSON payload size
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// CORS must run before rate limiters so preflight OPTIONS and any error responses (e.g. 429) include CORS headers
+// CORS: allowed origins from env only (no hardcoded production URLs)
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3000',
   process.env.ADMIN_URL || 'http://localhost:3001',
-  process.env.CANDIDATE_PORTAL_URL,
+  ...(process.env.CANDIDATE_PORTAL_URL
+    ? process.env.CANDIDATE_PORTAL_URL.split(',').map((u) => u.trim()).filter(Boolean)
+    : []),
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:5173',
