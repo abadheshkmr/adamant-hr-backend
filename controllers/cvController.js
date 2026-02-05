@@ -92,12 +92,18 @@ const addCV = async (req, res) => {
     const resumeUrl = resumeFile.path || `uploads/resumes/${resumeFile.filename}`;
     const coverLetterUrl = coverLetterFile ? (coverLetterFile.path || `uploads/coverLetters/${coverLetterFile.filename}`) : null;
 
+    const candidateMessage = (req.body.candidateMessage || '').trim();
+    if (candidateMessage && candidateMessage.length > 600) {
+      return res.status(400).json({ success: false, message: "Message must be at most 100 words (approx. 600 characters)." });
+    }
+
     // Step 4: Create application (linked to candidate)
     const application = new ApplicationModel({
       candidateId: candidate._id,
       jobId: normalizedJobId,
       resume: { url: resumeUrl },
       coverLetter: coverLetterUrl ? { url: coverLetterUrl } : {},
+      candidateMessage: candidateMessage || undefined,
       status: 'pending',
       appliedAt: new Date()
     });

@@ -25,6 +25,8 @@ import clientRouter from "./routes/clientRoute.js";
 import companyRouter from "./routes/companyRoute.js";
 import candidateRouter from "./routes/candidateRoute.js";
 import jobAlertRouter from "./routes/jobAlertRoute.js";
+import contactRouter from "./routes/contactRoute.js";
+import settingsRouter from "./routes/settingsRoute.js";
 import { apiLimiter, speedLimiter, suspiciousActivityTracker } from "./middleware/ddosProtection.js";
 import { processScheduledAlerts } from "./services/jobAlertService.js";
 
@@ -118,6 +120,8 @@ app.use("/api/client", clientRouter);
 app.use("/api/company", companyRouter);
 app.use("/api/candidate", candidateRouter);
 app.use("/api/job-alert", jobAlertRouter);
+app.use("/api/contact", contactRouter);
+app.use("/api/settings", settingsRouter);
 
 app.get("/" , (req , res)=>{
     res.send("API Working")

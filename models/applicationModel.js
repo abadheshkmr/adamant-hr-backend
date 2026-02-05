@@ -38,6 +38,11 @@ const applicationSchema = new mongoose.Schema({
     type: fileAttachmentSubSchema,
     default: {},
   },
+  candidateMessage: {
+    type: String,
+    trim: true,
+    maxlength: 600,
+  },
   // Job-specific education details (optional - if job requires different info than candidate's base)
   // Most jobs will use candidate's base education, but some might need job-specific details
   jobSpecificEducation: {

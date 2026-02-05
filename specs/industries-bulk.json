@@ -1,0 +1,76 @@
+{
+  "industries": [
+    {
+      "name": "Information Technology",
+      "description": "Adamant HR connects you with skilled IT professionals across the full spectrum of technology roles. From software development and system engineering to infrastructure, support, and emerging specializations, we help you find the right talent for your projects. Whether you need developers, architects, analysts, or technical graduates, we match you with professionals who fit your tech stack and team culture.",
+      "list": ["Software Development & Engineering", "System & Infrastructure", "Data & Analytics", "IT Support & Operations", "Emerging Technologies"],
+      "image": "industry/information-technology.png"
+    },
+    {
+      "name": "Automotive",
+      "description": "Adamant HR connects you with skilled professionals across the full spectrum of automotive roles. From manufacturing and assembly to engineering, quality, supply chain, and sales, we help you find the right talent for your operations. Whether you need plant staff, technicians, engineers, or support roles, we match you with professionals who fit your requirements and culture.",
+      "list": ["Manufacturing & Assembly", "Engineering & R&D", "Quality & Production", "Supply Chain & Logistics", "Sales & After-Sales"],
+      "image": "industry/automotive.png"
+    },
+    {
+      "name": "Banking, Financial Services & Insurance (BFSI)",
+      "description": "Adamant HR connects you with professionals across the full spectrum of BFSI roles. From branch operations and sales to risk, compliance, and back-office support, we help you find talent for banking, insurance, and financial services. Whether you need relationship managers, operations staff, or compliance specialists, we match you with professionals who fit your requirements and culture.",
+      "list": ["Branch Operations & Sales", "Risk & Compliance", "Back-Office & Processing", "Insurance & Claims", "All BFSI Roles"],
+      "image": "industry/bfsi.png"
+    },
+    {
+      "name": "NBFC & Fintech",
+      "description": "We help you hire talent across all NBFC and fintech roles—lending, collections, operations, and digital finance. From field executives to credit analysts and tech-enabled roles, we connect you with professionals who can support your growth and compliance needs.",
+      "list": ["Lending & Credit", "Collections & Recovery", "Operations & Processing", "Digital & Tech Roles", "All NBFC & Fintech Roles"],
+      "image": "industry/nbfc-fintech.png"
+    },
+    {
+      "name": "FMCG & Consumer Goods",
+      "description": "Adamant HR connects you with professionals across the full spectrum of FMCG roles. From sales, distribution, and trade marketing to supply chain and manufacturing, we help you find talent for fast-moving consumer goods. Whether you need field force, brand managers, or logistics staff, we match you with professionals who fit your operations and culture.",
+      "list": ["Sales & Distribution", "Trade Marketing", "Supply Chain & Logistics", "Manufacturing & Production", "All FMCG Roles"],
+      "image": "industry/fmcg-consumer-goods.png"
+    },
+    {
+      "name": "Manufacturing & Industrial",
+      "description": "We help you hire talent across all manufacturing and industrial roles—production, maintenance, quality, and plant operations. From shop floor to supervisory and technical roles, we connect you with professionals who can support your production and efficiency goals.",
+      "list": ["Production & Assembly", "Maintenance & Engineering", "Quality & Process", "Plant Operations", "All Manufacturing Roles"],
+      "image": "industry/manufacturing-industrial.png"
+    },
+    {
+      "name": "Retail & E-Commerce",
+      "description": "Adamant HR connects you with professionals across the full spectrum of retail and e-commerce roles. From store operations and merchandising to logistics, customer service, and digital commerce, we help you find talent for omnichannel retail. Whether you need store staff, warehouse teams, or e-commerce specialists, we match you with professionals who fit your brand and operations.",
+      "list": ["Store Operations", "Merchandising & Visual", "Logistics & Fulfillment", "E-Commerce & Digital", "All Retail Roles"],
+      "image": "industry/retail-ecommerce.png"
+    },
+    {
+      "name": "Pharmaceutical & Healthcare",
+      "description": "We help you hire talent across all pharma and healthcare roles—medical representatives, manufacturing, quality assurance, and clinical support. From field force to plant and regulatory roles, we connect you with professionals who understand compliance and industry standards.",
+      "list": ["Medical & Sales Representatives", "Manufacturing & QA", "Regulatory & Compliance", "Clinical & Support", "All Pharma & Healthcare Roles"],
+      "image": "industry/pharmaceutical-healthcare.png"
+    },
+    {
+      "name": "Logistics & Supply Chain",
+      "description": "Adamant HR connects you with professionals across the full spectrum of logistics and supply chain roles. From warehousing and transportation to procurement and last-mile delivery, we help you find talent for your logistics operations. Whether you need warehouse staff, fleet managers, or supply chain analysts, we match you with professionals who fit your operations and scale.",
+      "list": ["Warehousing & Inventory", "Transportation & Fleet", "Procurement & Sourcing", "Last-Mile & Delivery", "All Logistics Roles"],
+      "image": "industry/logistics-supply-chain.png"
+    },
+    {
+      "name": "Construction & Real Estate",
+      "description": "We help you hire talent across all construction and real estate roles—site execution, project management, sales, and support. From engineers and supervisors to sales executives and administrative staff, we connect you with professionals who can support your projects and growth.",
+      "list": ["Site & Project Execution", "Engineering & Supervision", "Sales & Business Development", "Support & Administration", "All Construction & Real Estate Roles"],
+      "image": "industry/construction-real-estate.png"
+    },
+    {
+      "name": "Telecom & Telecommunications",
+      "description": "Adamant HR connects you with professionals across the full spectrum of telecom roles. From network operations and field engineering to sales, customer service, and retail, we help you find talent for telecommunications. Whether you need technical staff, sales teams, or support roles, we match you with professionals who fit your network and business needs.",
+      "list": ["Network & Field Operations", "Sales & Retail", "Customer Service", "Technical & Engineering", "All Telecom Roles"],
+      "image": "industry/telecom-telecommunications.png"
+    },
+    {
+      "name": "Hospitality & Services",
+      "description": "We help you hire talent across all hospitality and service roles—hotels, restaurants, facilities, and customer-facing operations. From front desk and housekeeping to F&B and management, we connect you with professionals who can deliver quality service and guest experience.",
+      "list": ["Front Office & Guest Services", "F&B & Kitchen", "Housekeeping & Facilities", "Management & Support", "All Hospitality Roles"],
+      "image": "industry/hospitality-services.png"
+    }
+  ]
+}

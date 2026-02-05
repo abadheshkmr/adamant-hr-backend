@@ -178,6 +178,19 @@ const listVacancy = async (req,res) => {
             filter.client = req.query.client;
         }
 
+        // Application deadline filter: exclude vacancies where deadline has passed (career page only, not admin)
+        if (!isAdmin) {
+            const deadlineCondition = {
+                $or: [
+                    { applicationDeadline: null },
+                    { applicationDeadline: { $exists: false } },
+                    { applicationDeadline: { $gte: new Date() } }
+                ]
+            };
+            if (!filter.$and) filter.$and = [];
+            filter.$and.push(deadlineCondition);
+        }
+
         // Search in job title, description, skills, and location (city/state)
         if (req.query.search && req.query.search.trim()) {
             const searchEscaped = escapeRegex(req.query.search.trim());

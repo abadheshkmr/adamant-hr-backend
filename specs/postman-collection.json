@@ -271,6 +271,38 @@
 			"name": "Industries",
 			"item": [
 				{
+					"name": "Bulk Add/Update Industries",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{admin_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"industries\": [\n    {\n      \"name\": \"Information Technology\",\n      \"description\": \"Adamant HR connects you with skilled IT professionals across the full spectrum of technology roles. From software development and system engineering to infrastructure, support, and emerging specializations, we help you find the right talent for your projects. Whether you need developers, architects, analysts, or technical graduates, we match you with professionals who fit your tech stack and team culture.\",\n      \"list\": [\"Software Development & Engineering\", \"System & Infrastructure\", \"Data & Analytics\", \"IT Support & Operations\", \"Emerging Technologies\"],\n      \"image\": \"industry/information-technology.png\"\n    },\n    {\n      \"name\": \"Automotive\",\n      \"description\": \"Adamant HR connects you with skilled professionals across the full spectrum of automotive roles. From manufacturing and assembly to engineering, quality, supply chain, and sales, we help you find the right talent for your operations. Whether you need plant staff, technicians, engineers, or support roles, we match you with professionals who fit your requirements and culture.\",\n      \"list\": [\"Manufacturing & Assembly\", \"Engineering & R&D\", \"Quality & Production\", \"Supply Chain & Logistics\", \"Sales & After-Sales\"],\n      \"image\": \"industry/automotive.png\"\n    },\n    {\n      \"name\": \"Banking, Financial Services & Insurance (BFSI)\",\n      \"description\": \"Adamant HR connects you with professionals across the full spectrum of BFSI roles. From branch operations and sales to risk, compliance, and back-office support, we help you find talent for banking, insurance, and financial services. Whether you need relationship managers, operations staff, or compliance specialists, we match you with professionals who fit your requirements and culture.\",\n      \"list\": [\"Branch Operations & Sales\", \"Risk & Compliance\", \"Back-Office & Processing\", \"Insurance & Claims\", \"All BFSI Roles\"],\n      \"image\": \"industry/bfsi.png\"\n    },\n    {\n      \"name\": \"NBFC & Fintech\",\n      \"description\": \"We help you hire talent across all NBFC and fintech roles—lending, collections, operations, and digital finance. From field executives to credit analysts and tech-enabled roles, we connect you with professionals who can support your growth and compliance needs.\",\n      \"list\": [\"Lending & Credit\", \"Collections & Recovery\", \"Operations & Processing\", \"Digital & Tech Roles\", \"All NBFC & Fintech Roles\"],\n      \"image\": \"industry/nbfc-fintech.png\"\n    },\n    {\n      \"name\": \"FMCG & Consumer Goods\",\n      \"description\": \"Adamant HR connects you with professionals across the full spectrum of FMCG roles. From sales, distribution, and trade marketing to supply chain and manufacturing, we help you find talent for fast-moving consumer goods. Whether you need field force, brand managers, or logistics staff, we match you with professionals who fit your operations and culture.\",\n      \"list\": [\"Sales & Distribution\", \"Trade Marketing\", \"Supply Chain & Logistics\", \"Manufacturing & Production\", \"All FMCG Roles\"],\n      \"image\": \"industry/fmcg-consumer-goods.png\"\n    },\n    {\n      \"name\": \"Manufacturing & Industrial\",\n      \"description\": \"We help you hire talent across all manufacturing and industrial roles—production, maintenance, quality, and plant operations. From shop floor to supervisory and technical roles, we connect you with professionals who can support your production and efficiency goals.\",\n      \"list\": [\"Production & Assembly\", \"Maintenance & Engineering\", \"Quality & Process\", \"Plant Operations\", \"All Manufacturing Roles\"],\n      \"image\": \"industry/manufacturing-industrial.png\"\n    },\n    {\n      \"name\": \"Retail & E-Commerce\",\n      \"description\": \"Adamant HR connects you with professionals across the full spectrum of retail and e-commerce roles. From store operations and merchandising to logistics, customer service, and digital commerce, we help you find talent for omnichannel retail. Whether you need store staff, warehouse teams, or e-commerce specialists, we match you with professionals who fit your brand and operations.\",\n      \"list\": [\"Store Operations\", \"Merchandising & Visual\", \"Logistics & Fulfillment\", \"E-Commerce & Digital\", \"All Retail Roles\"],\n      \"image\": \"industry/retail-ecommerce.png\"\n    },\n    {\n      \"name\": \"Pharmaceutical & Healthcare\",\n      \"description\": \"We help you hire talent across all pharma and healthcare roles—medical representatives, manufacturing, quality assurance, and clinical support. From field force to plant and regulatory roles, we connect you with professionals who understand compliance and industry standards.\",\n      \"list\": [\"Medical & Sales Representatives\", \"Manufacturing & QA\", \"Regulatory & Compliance\", \"Clinical & Support\", \"All Pharma & Healthcare Roles\"],\n      \"image\": \"industry/pharmaceutical-healthcare.png\"\n    },\n    {\n      \"name\": \"Logistics & Supply Chain\",\n      \"description\": \"Adamant HR connects you with professionals across the full spectrum of logistics and supply chain roles. From warehousing and transportation to procurement and last-mile delivery, we help you find talent for your logistics operations. Whether you need warehouse staff, fleet managers, or supply chain analysts, we match you with professionals who fit your operations and scale.\",\n      \"list\": [\"Warehousing & Inventory\", \"Transportation & Fleet\", \"Procurement & Sourcing\", \"Last-Mile & Delivery\", \"All Logistics Roles\"],\n      \"image\": \"industry/logistics-supply-chain.png\"\n    },\n    {\n      \"name\": \"Construction & Real Estate\",\n      \"description\": \"We help you hire talent across all construction and real estate roles—site execution, project management, sales, and support. From engineers and supervisors to sales executives and administrative staff, we connect you with professionals who can support your projects and growth.\",\n      \"list\": [\"Site & Project Execution\", \"Engineering & Supervision\", \"Sales & Business Development\", \"Support & Administration\", \"All Construction & Real Estate Roles\"],\n      \"image\": \"industry/construction-real-estate.png\"\n    },\n    {\n      \"name\": \"Telecom & Telecommunications\",\n      \"description\": \"Adamant HR connects you with professionals across the full spectrum of telecom roles. From network operations and field engineering to sales, customer service, and retail, we help you find talent for telecommunications. Whether you need technical staff, sales teams, or support roles, we match you with professionals who fit your network and business needs.\",\n      \"list\": [\"Network & Field Operations\", \"Sales & Retail\", \"Customer Service\", \"Technical & Engineering\", \"All Telecom Roles\"],\n      \"image\": \"industry/telecom-telecommunications.png\"\n    },\n    {\n      \"name\": \"Hospitality & Services\",\n      \"description\": \"We help you hire talent across all hospitality and service roles—hotels, restaurants, facilities, and customer-facing operations. From front desk and housekeeping to F&B and management, we connect you with professionals who can deliver quality service and guest experience.\",\n      \"list\": [\"Front Office & Guest Services\", \"F&B & Kitchen\", \"Housekeeping & Facilities\", \"Management & Support\", \"All Hospitality Roles\"],\n      \"image\": \"industry/hospitality-services.png\"\n    }\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/industry/bulk",
+							"host": ["{{base_url}}"],
+							"path": ["api", "industry", "bulk"]
+						},
+						"description": "Add or update multiple industries in one request. Requires admin authentication. Send JSON body with industries array. Each item: name (required), description, list (array of strings), image (optional - path like 'industry/information-technology.png' for frontend static images). Existing industries (by name) are updated; new ones are added. Images are stored in frontend public/images/industry/."
+					},
+					"response": []
+				},
+				{
 					"name": "Add Industry",
 					"request": {
 						"method": "POST",
@@ -387,7 +419,13 @@
 									"key": "image",
 									"type": "file",
 									"src": [],
-									"description": "Optional: Upload new image"
+									"description": "Optional: Upload new image file (use Choose Files)"
+								},
+								{
+									"key": "imagePath",
+									"value": "industry/information-technology.png",
+									"type": "text",
+									"description": "Optional: Set image path without upload. Use 'industry/xxx.png' for frontend static images in public/images/industry/. Overridden by image file if both provided."
 								}
 							]
 						},
@@ -396,7 +434,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["api", "industry", "update"]
 						},
-						"description": "Update an industry. Requires admin authentication. Image is optional."
+						"description": "Update an industry. Requires admin authentication. Image: (1) Upload file via 'image' field, or (2) Set 'imagePath' to use frontend static image (e.g. industry/information-technology.png). Frontend images are in hr-frontend/public/images/industry/."
 					},
 					"response": []
 				},
